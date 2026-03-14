@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background: #f4f6f8;
+        }
+        .container {
+            max-width: 950px;
+            margin: auto;
+            background: white;
+            padding: 24px;
+            border-radius: 14px;
+            box-shadow: 0 2px 14px rgba(0,0,0,0.08);
+        }
+        h1 {
+            margin-top: 0;
+        }
+        form {
+            display: grid;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        select, textarea, button {
+            padding: 12px;
+            font-size: 15px;
+        }
+        textarea {
+            min-height: 120px;
+        }
+        button {
+            cursor: pointer;
+        }
+        .card {
+            background: #fafafa;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 18px;
+        }
+        .allow {
+            color: green;
+            font-weight: bold;
+        }
+        .deny {
+            color: red;
+            font-weight: bold;
+        }
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background: #111;
+            color: #f1f1f1;
+            padding: 12px;
+            border-radius: 10px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>{{ title }}</h1>
+        <p>Natural-language request → OpenAI tool selection → RBAC policy check → safe execution.</p>
+
+        <form method="post" action="/demo">
+            <label for="username">Select user</label>
+            <select name="username" id="username" required>
+                <option value="admin_user">admin_user</option>
+                <option value="manager_user">manager_user</option>
+                <option value="guest_user">guest_user</option>
+            </select>
+
+            <label for="prompt">Enter natural-language request</label>
+            <textarea name="prompt" id="prompt" placeholder="Example: Show all employees" required></textarea>
+
+            <button type="submit">Run Secure Demo</button>
+        </form>
+
+        {% if result %}
+        <div class="card">
+            <p><strong>User:</strong> {{ result.username }}</p>
+            <p><strong>Prompt:</strong> {{ result.prompt }}</p>
+            <p><strong>Selected Tool:</strong> {{ result.tool_name }}</p>
+            <p><strong>Arguments:</strong></p>
+            <pre>{{ result.arguments }}</pre>
+
+            <p>
+                <strong>Policy Decision:</strong>
+                {% if result.policy_decision == "ALLOW" %}
+                    <span class="allow">{{ result.policy_decision }}</span>
+                {% else %}
+                    <span class="deny">{{ result.policy_decision }}</span>
+                {% endif %}
+            </p>
+
+            <p><strong>Final Output:</strong></p>
+            <pre>{{ result.final_output }}</pre>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>
