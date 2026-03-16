@@ -2,44 +2,93 @@ import json
 from openai import OpenAI
 
 from app.core.config import settings
-from app.tools.definitions import TOOLS
+from app.mcp.server import mcp_server
 
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
-
 
 SYSTEM_PROMPT = """
 You are a tool-selection assistant for a secure enterprise database system.
 
-Your job is ONLY to choose the most appropriate function tool for the user's request.
+Your job is ONLY to choose the single most appropriate function tool for the user's request.
 Do not invent new tools.
 Do not explain the answer in natural language if a tool is appropriate.
 Prefer the safest and most specific tool.
+If no tool is appropriate, do not call any tool.
 """
 
 
-def select_tool_from_prompt(user_prompt: str):
-    response = client.responses.create(
-        model=settings.OPENAI_MODEL,
-        input=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-        tools=TOOLS,
-    )
+def build_openai_tools_from_mcp():
+    """
+    Convert registered MCP tools into the format expected by OpenAI chat.completions.
+    """
+    tools = []
 
-    function_calls = [item for item in response.output if item.type == "function_call"]
+    for tool in mcp_server.list_tools():
+        tools.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.input_schema,
+                }
+            }
+        )
 
-    if not function_calls:
+    return tools
+
+
+def select_tool_from_prompt(prompt: str):
+    """
+    Send the user prompt to OpenAI and extract the selected tool and arguments.
+    """
+    tools = build_openai_tools_from_mcp()
+
+    if not tools:
         return {
             "tool_name": None,
             "arguments": {},
-            "raw_output_text": getattr(response, "output_text", "")
+            "raw_output_text": "No tools available from MCP registry."
         }
 
-    call = function_calls[0]
+    try:
+        response = client.chat.completions.create(
+            model=settings.OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            tools=tools,
+            tool_choice="auto",
+        )
 
-    return {
-        "tool_name": call.name,
-        "arguments": json.loads(call.arguments) if call.arguments else {},
-        "raw_output_text": getattr(response, "output_text", "")
-    }
+        selected_tool_name = None
+        selected_arguments = {}
+
+        message = response.choices[0].message
+
+        if message.tool_calls:
+            tool_call = message.tool_calls[0]
+            selected_tool_name = tool_call.function.name
+
+            try:
+                selected_arguments = (
+                    json.loads(tool_call.function.arguments)
+                    if tool_call.function.arguments
+                    else {}
+                )
+            except json.JSONDecodeError:
+                selected_arguments = {}
+
+        return {
+            "tool_name": selected_tool_name,
+            "arguments": selected_arguments,
+            "raw_output_text": message.content if message.content else ""
+        }
+
+    except Exception as e:
+        return {
+            "tool_name": None,
+            "arguments": {},
+            "raw_output_text": f"OpenAI error: {str(e)}"
+        }

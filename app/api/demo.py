@@ -2,13 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, Form, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from fastapi.templating import Jinja2Templates
+import json
 
 from app.db.deps import get_db
-from app.policy.engine import check_permission
 from app.services.openai_service import select_tool_from_prompt
-from app.tools.executor import execute_tool
 
-import json
+from app.mcp.server import mcp_server
+from app.mcp.models import ToolCallRequest
+from app.mcp.context import build_mcp_context
 
 
 router = APIRouter(tags=["demo"])
@@ -59,35 +60,34 @@ def run_demo(
             {"request": request, "title": "MCP Secure Demo", "result": result},
         )
 
-    allowed = check_permission(db, username, tool_name)
+    context = build_mcp_context(username=username, raw_prompt=prompt)
 
-    print(f"Policy decision: {'ALLOW' if allowed else 'DENY'}")
-    print("--------------------\n")
+    mcp_request = ToolCallRequest(
+        tool_name=tool_name,
+        arguments=arguments,
+        context=context,
+    )
 
-    if not allowed:
-        result = {
-            "username": username,
-            "prompt": prompt,
-            "tool_name": tool_name,
-            "arguments": arguments,
-            "policy_decision": "DENY",
-            "final_output": f"Access denied: user '{username}' is not allowed to execute '{tool_name}'.",
-        }
-        return templates.TemplateResponse(
-            "demo.html",
-            {"request": request, "title": "MCP Secure Demo", "result": result},
-        )
+    mcp_response = mcp_server.call_tool(db, mcp_request)
 
-    execution_result = execute_tool(db, tool_name, arguments)
-    execution_result = json.dumps(execution_result, indent=2)
+    policy_decision = "DENY"
+    if getattr(mcp_response, 'authorization', None) and mcp_response.authorization.allowed:
+        policy_decision = "ALLOW"
+    elif not getattr(mcp_response, 'authorization', None) and mcp_response.success:
+        policy_decision = "ALLOW"
+
+    final_output = mcp_response.result if mcp_response.success else mcp_response.error
+    
+    if isinstance(final_output, (dict, list)):
+        final_output = json.dumps(final_output, indent=2, ensure_ascii=False)
 
     result = {
         "username": username,
         "prompt": prompt,
         "tool_name": tool_name,
         "arguments": arguments,
-        "policy_decision": "ALLOW",
-        "final_output": execution_result,
+        "policy_decision": policy_decision,
+        "final_output": str(final_output),
     }
 
     return templates.TemplateResponse(
