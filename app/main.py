@@ -9,6 +9,7 @@ from app.db.seed import seed_data
 from app.api.employees import router as employees_router
 from app.api.demo import router as demo_router
 from app.api.mcp import router as mcp_router
+from app.api.rbac_admin import router as rbac_admin_router
 from app.mcp.registry import register_default_tools
 
 import app.models.rbac_models
@@ -43,6 +44,7 @@ app = FastAPI(
 app.include_router(employees_router)
 app.include_router(demo_router)
 app.include_router(mcp_router)
+app.include_router(rbac_admin_router)
 
 templates = Jinja2Templates(directory="app/templates")
 

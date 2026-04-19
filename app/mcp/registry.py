@@ -75,13 +75,26 @@ def register_default_tools():
     registry.register_tool(
         ToolDefinition(
             name="delete_employee",
-            description="Delete an employee by employee ID.",
+            description="Delete one or more employees by their IDs.",
             input_schema={
                 "type": "object",
                 "properties": {
-                    "employee_id": {"type": "integer", "description": "The employee ID"}
+                    "employee_id": {
+                        "type": "integer", 
+                        "description": "The ID of a single employee to delete."
+                    },
+                    "employee_ids": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "A list of multiple employee IDs to delete."
+                    },
+                    "delete_all": {
+                        "type": "boolean",
+                        "description": "Set to true to attempt deleting all records (High Risk)."
+                    }
                 },
-                "required": ["employee_id"],
+                # We don't make them 'required' so the LLM can choose which one fits the prompt
+                "required": [], 
                 "additionalProperties": False,
             },
             required_permission="delete_employee",

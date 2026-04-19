@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Literal
 from pydantic import BaseModel, Field
 
 
@@ -26,12 +26,13 @@ class ToolCallRequest(BaseModel):
 
 class AuthorizationDecision(BaseModel):
     allowed: bool
+    stage: Literal["rbac", "policy", "validation"]
     reason: str
-
+    matched_policy: Optional[str] = None
 
 class ToolCallResponse(BaseModel):
     success: bool
     tool_name: str
     result: Any = None
     error: Optional[str] = None
-    authorization: Optional[AuthorizationDecision] = None
+    authorization: AuthorizationDecision

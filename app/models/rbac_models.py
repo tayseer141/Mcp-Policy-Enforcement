@@ -9,6 +9,17 @@ class Role(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True)
 
+    # Relationship to User
+    users = relationship("User", back_populates="role")
+    
+    # MANY-TO-MANY: Link to Permission through RolePermission
+    # This allows the 'role.permissions' access in your engine.py
+    permissions = relationship(
+        "Permission", 
+        secondary="role_permissions", 
+        back_populates="roles"
+    )
+
 
 class User(Base):
     __tablename__ = "users"
@@ -17,7 +28,7 @@ class User(Base):
     username = Column(String, unique=True)
     role_id = Column(Integer, ForeignKey("roles.id"))
 
-    role = relationship("Role")
+    role = relationship("Role", back_populates="users")
 
 
 class Permission(Base):
@@ -25,6 +36,13 @@ class Permission(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String, unique=True)
+
+    # Back reference to roles
+    roles = relationship(
+        "Role", 
+        secondary="role_permissions", 
+        back_populates="permissions"
+    )
 
 
 class RolePermission(Base):

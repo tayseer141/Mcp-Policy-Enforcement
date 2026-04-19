@@ -81,6 +81,13 @@ def run_demo(
     if isinstance(final_output, (dict, list)):
         final_output = json.dumps(final_output, indent=2, ensure_ascii=False)
 
+    authorization_stage = None
+    matched_policy = None
+
+    if getattr(mcp_response, "authorization", None):
+        authorization_stage = mcp_response.authorization.stage
+        matched_policy = mcp_response.authorization.matched_policy
+
     result = {
         "username": username,
         "prompt": prompt,
@@ -88,6 +95,8 @@ def run_demo(
         "arguments": arguments,
         "policy_decision": policy_decision,
         "final_output": str(final_output),
+        "authorization_stage": authorization_stage,
+        "matched_policy": matched_policy,
     }
 
     return templates.TemplateResponse(

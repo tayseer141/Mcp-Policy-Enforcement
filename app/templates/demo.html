@@ -60,12 +60,22 @@
             border-radius: 10px;
             overflow-x: auto;
         }
+        .meta {
+            background: #f0f4f8;
+            border: 1px solid #d9e2ec;
+            border-radius: 10px;
+            padding: 12px;
+            margin-top: 12px;
+        }
+        .meta p {
+            margin: 8px 0;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>{{ title }}</h1>
-        <p>Natural-language request → OpenAI tool selection → RBAC policy check → safe execution.</p>
+        <p>Natural-language request → OpenAI tool selection → RBAC + Policy Enforcement → safe execution.</p>
 
         <form method="post" action="/demo">
             <label for="username">Select user</label>
@@ -85,7 +95,7 @@
         <div class="card">
             <p><strong>User:</strong> {{ result.username }}</p>
             <p><strong>Prompt:</strong> {{ result.prompt }}</p>
-            <p><strong>Selected Tool:</strong> {{ result.tool_name }}</p>
+            <p><strong>Selected Tool:</strong> {{ result.tool_name or "N/A" }}</p>
             <p><strong>Arguments:</strong></p>
             <pre>{{ result.arguments }}</pre>
 
@@ -97,6 +107,11 @@
                     <span class="deny">{{ result.policy_decision }}</span>
                 {% endif %}
             </p>
+
+            <div class="meta">
+                <p><strong>Authorization Stage:</strong> {{ result.authorization_stage or "N/A" }}</p>
+                <p><strong>Matched Policy:</strong> {{ result.matched_policy or "N/A" }}</p>
+            </div>
 
             <p><strong>Final Output:</strong></p>
             <pre>{{ result.final_output }}</pre>
