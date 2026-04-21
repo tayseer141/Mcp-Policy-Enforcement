@@ -1,7 +1,9 @@
 services:
+  # 1. Main FastAPI Web Application (UI + REST API)
   web:
     build: .
     container_name: mcp_web
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"
     volumes:
@@ -9,8 +11,25 @@ services:
     env_file:
       - .env
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
+  # 2. MCP Server (Streamable HTTP via FastMCP)
+  mcp-server:
+    build: .
+    container_name: mcp_server_gateway
+    command: uvicorn app.mcp.server:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8001:8000"
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # 3. Database
   db:
     image: postgres:16
     container_name: mcp_db
@@ -23,7 +42,11 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mcp_user -d mcp_demo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:
-
