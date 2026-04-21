@@ -6,6 +6,12 @@ from app.mcp.server import mcp
 
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
+# Parameters that are injected by the server/gateway and must never be
+# exposed to the LLM or accepted from it. `username` comes from the
+# authenticated session; `raw_prompt` is injected by the web gateway to
+# feed the intent-alignment stage in the policy engine.
+RESERVED_PARAMS: tuple[str, ...] = ("username", "raw_prompt")
+
 SYSTEM_PROMPT = """
 You are a tool-selection assistant for a secure enterprise database system.
 
@@ -15,9 +21,10 @@ Do not explain the answer in natural language if a tool is appropriate.
 Prefer the safest and most specific tool.
 If no tool is appropriate, do not call any tool.
 
-IMPORTANT: Never provide a value for the `username` parameter. It will be
-injected by the server from the authenticated session. Focus only on the
-operational parameters (employee_id, new_salary, etc.).
+IMPORTANT: Never provide a value for the `username` or `raw_prompt`
+parameters. Both are injected by the server from the authenticated
+session and the original request. Focus only on the operational
+parameters (employee_id, new_salary, etc.).
 """
 
 
@@ -45,20 +52,25 @@ def _extract_tool_parameters(tool) -> dict:
     }
 
 
-def _strip_username_from_schema(schema: dict) -> dict:
+def _strip_reserved_params_from_schema(schema: dict) -> dict:
     """
-    Hide the `username` parameter from the LLM. Identity is established by
-    the authenticated session, not by anything the model produces.
+    Hide server-injected parameters from the LLM's tool schema.
+
+    - `username`: identity is established by the authenticated session.
+    - `raw_prompt`: the original natural-language request, injected by
+       the web gateway to drive the intent-alignment policy stage. The
+       model must never see or invent a value for it.
     """
     if not isinstance(schema, dict):
         return schema
 
     clean = dict(schema)
     props = dict(clean.get("properties", {}))
-    props.pop("username", None)
+    for reserved in RESERVED_PARAMS:
+        props.pop(reserved, None)
     clean["properties"] = props
 
-    required = [r for r in clean.get("required", []) if r != "username"]
+    required = [r for r in clean.get("required", []) if r not in RESERVED_PARAMS]
     clean["required"] = required
 
     return clean
@@ -73,7 +85,7 @@ def build_openai_tools_from_mcp():
 
     for tool in mcp._tool_manager._tools.values():
         parameters = _extract_tool_parameters(tool)
-        parameters = _strip_username_from_schema(parameters)
+        parameters = _strip_reserved_params_from_schema(parameters)
 
         tools.append(
             {
@@ -131,8 +143,10 @@ def select_tool_from_prompt(prompt: str):
             except json.JSONDecodeError:
                 selected_arguments = {}
 
-            # Defensive: drop any username the LLM slipped in despite instructions.
-            selected_arguments.pop("username", None)
+            # Defensive: drop any reserved params the LLM slipped in
+            # despite the schema filtering and the system prompt.
+            for reserved in RESERVED_PARAMS:
+                selected_arguments.pop(reserved, None)
 
         return {
             "tool_name": selected_tool_name,

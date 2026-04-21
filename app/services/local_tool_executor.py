@@ -1,15 +1,15 @@
-from typing import Any
+from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
 from app.models.employee_model import Employee
 from app.models.rbac_models import User
-from app.policy.engine import authorize_tool_request
+from app.policy.engine import authorize_tool_request, RAW_PROMPT_ARG_KEY
 
 
-# Sentinel key used to mark a result as a policy/RBAC denial.
-# The MCP client watches for this and re-raises PermissionError on the web side
-# so the demo UI can cleanly distinguish "DENY" from "ERROR".
+# Sentinel key used to mark a result as a policy/RBAC/intent denial.
+# The MCP client watches for this and re-raises PermissionError on the web
+# side so the demo UI can cleanly distinguish "DENY" from "ERROR".
 POLICY_DENIED_KEY = "__policy_denied__"
 
 
@@ -37,28 +37,37 @@ def execute_tool_locally(
     tool_name: str,
     required_permission: str,
     arguments: dict[str, Any],
+    raw_prompt: Optional[str] = None,
 ) -> Any:
     """
     Local secure execution path for the real MCP server.
 
     Flow:
-    1. Resolve user from local RBAC database (raises on unknown user).
-    2. Run RBAC + policy authorization.
+    1. Resolve user from local RBAC database.
+    2. Run authorization: RBAC -> Intent -> Policy stages.
        - On DENY: return a structured denial payload (NOT an exception),
          so FastMCP treats this as a successful call whose body is the
          denial record. The web-side client translates it into a
          PermissionError for clean UI handling.
     3. Execute the requested tool against the DB.
     4. Return plain Python data on success.
+
+    `raw_prompt` (if provided) is routed into the policy engine's argument
+    bag under the reserved key so the intent-alignment stage can run.
+    It is NOT passed to the executor logic itself.
     """
     user = get_user_or_raise(db, username)
+
+    auth_arguments = dict(arguments)
+    if raw_prompt:
+        auth_arguments[RAW_PROMPT_ARG_KEY] = raw_prompt
 
     decision = authorize_tool_request(
         db=db,
         user=user,
         tool_name=tool_name,
         required_permission=required_permission,
-        arguments=arguments,
+        arguments=auth_arguments,
     )
 
     if not decision.allowed:
@@ -127,7 +136,6 @@ def execute_tool_locally(
         employee_ids = arguments.get("employee_ids")
         employee_id = arguments.get("employee_id")
 
-        # Bulk delete (list of IDs)
         if isinstance(employee_ids, list) and employee_ids:
             deleted_count = 0
             for emp_id in employee_ids:
@@ -141,7 +149,6 @@ def execute_tool_locally(
                 "deleted_count": deleted_count,
             }
 
-        # Single delete
         if employee_id is not None:
             employee = db.query(Employee).filter(Employee.id == employee_id).first()
             if not employee:

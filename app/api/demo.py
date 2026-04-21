@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Form, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from fastapi.templating import Jinja2Templates
@@ -35,8 +35,8 @@ def run_demo(
     """
     Main demo execution flow:
     1. Model selects tool via OpenAI Service.
-    2. Request is routed through the Secure Tool Service.
-    3. Policy Engine evaluates RBAC and Business Logic.
+    2. Request is routed through the Secure Tool Service (MCP client).
+    3. Policy Engine on the MCP server runs RBAC -> Intent -> Policy stages.
     4. Result is returned to the UI.
     """
     # Step 1: AI Analysis
@@ -58,41 +58,47 @@ def run_demo(
             "arguments": {},
             "policy_decision": "DENY",
             "final_output": "The model could not map your request to an available secure tool.",
+            "authorization_stage": "tool-selection",
         }
         return templates.TemplateResponse(
             "demo.html",
             {"request": request, "title": "MCP Secure Demo", "result": result},
         )
 
-    # Step 2: Secure Execution Path
+    # Step 2: Secure Execution Path (web -> MCP server -> policy engine -> DB)
     policy_decision = "DENY"
     final_output = ""
     auth_stage = "N/A"
 
     try:
-        # Every request goes through the unified policy path
         execution_result = run_tool_for_user(
             db=db,
             username=username,
             tool_name=tool_name,
-            required_permission=tool_name, # Mapping tool to permission
-            arguments=arguments
+            required_permission=tool_name,
+            arguments=arguments,
+            raw_prompt=prompt,  # enables the intent-alignment stage
         )
         policy_decision = "ALLOW"
         final_output = execution_result
-        auth_stage = "Success"
+        auth_stage = "success"
 
     except PermissionError as e:
-        # This catches Policy violations (like the 20% rule) or RBAC failures
+        # RBAC / Intent / Policy denial reported by the MCP server.
         policy_decision = "DENY"
         final_output = f"Access Blocked: {str(e)}"
-        auth_stage = "Policy/RBAC Enforcement"
-        
+        reason_lower = str(e).lower()
+        if "intent" in reason_lower:
+            auth_stage = "intent"
+        elif "lacks permission" in reason_lower or "no assigned role" in reason_lower:
+            auth_stage = "rbac"
+        else:
+            auth_stage = "policy"
+
     except Exception as e:
-        # General system error handling
         policy_decision = "ERROR"
         final_output = f"Execution failed: {str(e)}"
-        auth_stage = "System"
+        auth_stage = "system"
 
     # Step 3: Formatting for UI Display
     if isinstance(final_output, (dict, list)):
@@ -105,10 +111,10 @@ def run_demo(
         "arguments": arguments,
         "policy_decision": policy_decision,
         "final_output": str(final_output),
-        "authorization_stage": auth_stage
+        "authorization_stage": auth_stage,
     }
 
-    print(f"Final Decision: {policy_decision}")
+    print(f"Final Decision: {policy_decision} (stage={auth_stage})")
     print("--------------------\n")
 
     return templates.TemplateResponse(

@@ -24,8 +24,6 @@ logger = logging.getLogger("mcp-server")
 
 
 # --- Bootstrap DB schema + seed (idempotent) ---
-# Runs at module load in whichever container imports this module.
-# seed_data() guards against re-seeding, so this is safe to run twice.
 logger.info("Bootstrapping database (create_all + seed)...")
 Base.metadata.create_all(bind=engine)
 _db = SessionLocal()
@@ -40,8 +38,16 @@ logger.info("Database bootstrap complete.")
 mcp = FastMCP("policy-enforcement-mcp", json_response=True)
 
 
+# NOTE on the `raw_prompt` parameter:
+# Every tool accepts an optional `raw_prompt` string. It's the original
+# natural-language request the user typed, injected by the web gateway so
+# the policy engine can run the intent-alignment stage server-side. This
+# parameter is stripped from the tool schema exposed to the LLM, so the
+# model never sees it or invents a value.
+
+
 @mcp.tool()
-def health_check(username: str) -> dict:
+def health_check(username: str, raw_prompt: str = "") -> dict:
     """Check if the MCP server and DB are responsive."""
     return {
         "status": "ok",
@@ -51,7 +57,7 @@ def health_check(username: str) -> dict:
 
 
 @mcp.tool()
-def get_employees(username: str) -> list[dict]:
+def get_employees(username: str, raw_prompt: str = "") -> list[dict]:
     """Retrieve all employee records (Requires 'get_employees' permission)."""
     db = SessionLocal()
     try:
@@ -61,13 +67,16 @@ def get_employees(username: str) -> list[dict]:
             tool_name="get_employees",
             required_permission="get_employees",
             arguments={},
+            raw_prompt=raw_prompt,
         )
     finally:
         db.close()
 
 
 @mcp.tool()
-def get_employee_by_id(username: str, employee_id: int) -> dict:
+def get_employee_by_id(
+    username: str, employee_id: int, raw_prompt: str = ""
+) -> dict:
     """Retrieve a single employee by ID (Requires 'get_employee_by_id' permission)."""
     db = SessionLocal()
     try:
@@ -77,14 +86,20 @@ def get_employee_by_id(username: str, employee_id: int) -> dict:
             tool_name="get_employee_by_id",
             required_permission="get_employee_by_id",
             arguments={"employee_id": employee_id},
+            raw_prompt=raw_prompt,
         )
     finally:
         db.close()
 
 
 @mcp.tool()
-def update_salary(username: str, employee_id: int, new_salary: int) -> dict:
-    """Update an employee's salary. Enforces RBAC and the 20% max raise policy."""
+def update_salary(
+    username: str,
+    employee_id: int,
+    new_salary: int,
+    raw_prompt: str = "",
+) -> dict:
+    """Update an employee's salary. Enforces RBAC, intent alignment, and the 20% max raise policy."""
     db = SessionLocal()
     try:
         return execute_tool_locally(
@@ -96,6 +111,7 @@ def update_salary(username: str, employee_id: int, new_salary: int) -> dict:
                 "employee_id": employee_id,
                 "new_salary": new_salary,
             },
+            raw_prompt=raw_prompt,
         )
     finally:
         db.close()
@@ -107,10 +123,11 @@ def delete_employee(
     employee_id: Optional[int] = None,
     employee_ids: Optional[list[int]] = None,
     delete_all: bool = False,
+    raw_prompt: str = "",
 ) -> dict:
     """
     Delete one or more employee records.
-    Enforces RBAC and the mass-deletion policy (max 1 record by default).
+    Enforces RBAC, intent alignment, and the mass-deletion policy.
 
     Provide exactly one of: employee_id (single), employee_ids (list),
     or delete_all=True (will be blocked by the policy engine).
@@ -131,21 +148,11 @@ def delete_employee(
             tool_name="delete_employee",
             required_permission="delete_employee",
             arguments=arguments,
+            raw_prompt=raw_prompt,
         )
     finally:
         db.close()
 
 
-# ---------------------------------------------------------------------------
-# Expose the ASGI app.
-#
-# FastMCP's streamable_http_app() already serves the MCP endpoint at /mcp
-# (its default `settings.streamable_http_path`). It also installs its own
-# lifespan that runs `session_manager.run()`, which is required for the
-# Streamable HTTP transport to work.
-#
-# DO NOT wrap this in `Starlette(routes=[Mount("/mcp", app=...)])` -- that
-# strips the /mcp prefix and ends up serving the real endpoint at /mcp/mcp,
-# which was the "404 Not Found" bug you saw in the logs.
-# ---------------------------------------------------------------------------
+# Expose the ASGI app. FastMCP serves the MCP endpoint at /mcp by default.
 app = mcp.streamable_http_app()

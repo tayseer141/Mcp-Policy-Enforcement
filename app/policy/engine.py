@@ -2,11 +2,24 @@ from typing import Any, Dict
 from sqlalchemy.orm import Session
 
 from app.policy.models import AuthorizationDecision
+from app.policy.rules import (
+    evaluate_delete_limit_policy,
+    evaluate_salary_raise_policy,
+)
+from app.policy.intent import check_intent_alignment
 from app.models.employee_model import Employee
-from app.policy.rules import evaluate_delete_limit_policy, evaluate_salary_raise_policy
 from app.models.rbac_models import User
 
-def check_rbac(db: Session, user: User, required_permission: str) -> AuthorizationDecision:
+
+# Reserved key used to smuggle the original user prompt into the argument
+# bag so the policy engine can run the intent alignment stage. This key is
+# stripped from the LLM's visible tool schema, so the model never sees it.
+RAW_PROMPT_ARG_KEY = "__raw_prompt__"
+
+
+def check_rbac(
+    db: Session, user: User, required_permission: str
+) -> AuthorizationDecision:
     """
     Stage 1: Role-Based Access Control.
     Checks if the user's role has the required permission assigned.
@@ -16,23 +29,50 @@ def check_rbac(db: Session, user: User, required_permission: str) -> Authorizati
         return AuthorizationDecision(
             allowed=False,
             stage="rbac",
-            reason="User has no assigned role."
+            reason="User has no assigned role.",
         )
 
-    # Assumes a relationship exists on the Role model named 'permissions'
     permissions = {perm.name for perm in role.permissions}
-    
+
     if required_permission not in permissions:
         return AuthorizationDecision(
             allowed=False,
             stage="rbac",
-            reason=f"Role '{role.name}' lacks permission '{required_permission}'."
+            reason=f"Role '{role.name}' lacks permission '{required_permission}'.",
         )
 
     return AuthorizationDecision(
         allowed=True,
         stage="rbac",
-        reason=f"RBAC check passed for permission '{required_permission}'."
+        reason=f"RBAC check passed for permission '{required_permission}'.",
+    )
+
+
+def check_intent(
+    tool_name: str, arguments: Dict[str, Any]
+) -> AuthorizationDecision:
+    """
+    Stage 2: Intent Alignment.
+    Only enforced when a raw_prompt is present in the arguments. Direct API
+    calls (no natural language in the loop) skip this check.
+    """
+    raw_prompt = arguments.get(RAW_PROMPT_ARG_KEY)
+    if not raw_prompt:
+        return AuthorizationDecision(
+            allowed=True,
+            stage="intent",
+            reason="No raw prompt provided; intent alignment skipped.",
+        )
+
+    aligned, reason, _extracted, _tool_tags = check_intent_alignment(
+        tool_name, raw_prompt
+    )
+
+    return AuthorizationDecision(
+        allowed=aligned,
+        stage="intent",
+        reason=reason,
+        matched_policy="intent_alignment",
     )
 
 
@@ -43,26 +83,22 @@ def evaluate_policies(
     arguments: Dict[str, Any],
 ) -> AuthorizationDecision:
     """
-    Stage 2: Policy Evaluation layer.
-    Performs contextual checks based on tool arguments and business logic.
+    Stage 3: Business-logic Policy Evaluation.
+    Contextual checks based on tool arguments.
     """
-
-    # Policy: Mass Deletion Restriction
-    # Even if RBAC allows deletion, we enforce a limit on the number of records.
     if tool_name == "delete_employee":
         allowed, reason, matched_policy = evaluate_delete_limit_policy(
             tool_name=tool_name,
             arguments=arguments,
-            max_delete_count=1,  # Strict limit for the demo
+            max_delete_count=1,
         )
-
         return AuthorizationDecision(
             allowed=allowed,
             stage="policy",
             reason=reason,
-            matched_policy=matched_policy
+            matched_policy=matched_policy,
         )
-    #########################
+
     if tool_name == "update_salary":
         employee_id = arguments.get("employee_id")
         requested_salary = arguments.get("new_salary")
@@ -96,12 +132,11 @@ def evaluate_policies(
             reason=reason,
             matched_policy=matched_policy,
         )
-    # Add more policy evaluations here (e.g., salary thresholds, time-of-day checks)
 
     return AuthorizationDecision(
         allowed=True,
         stage="policy",
-        reason="No policy blocked the request."
+        reason="No policy blocked the request.",
     )
 
 
@@ -113,22 +148,23 @@ def authorize_tool_request(
     arguments: Dict[str, Any],
 ) -> AuthorizationDecision:
     """
-    The main Entry Point (Policy Decision Point).
-    Orchestrates the RBAC and Policy stages in sequence.
+    Policy Decision Point.
+    Runs the three stages in order: RBAC -> Intent -> Policy.
     """
-    # 1. Run RBAC Check
     rbac_decision = check_rbac(db, user, required_permission)
     if not rbac_decision.allowed:
         return rbac_decision
 
-    # 2. Run Policy Evaluation
+    intent_decision = check_intent(tool_name, arguments)
+    if not intent_decision.allowed:
+        return intent_decision
+
     policy_decision = evaluate_policies(db, user, tool_name, arguments)
     if not policy_decision.allowed:
         return policy_decision
 
-    # 3. Final Approval
     return AuthorizationDecision(
         allowed=True,
         stage="policy",
-        reason="Authorization passed: RBAC and policy checks succeeded."
+        reason="Authorization passed: RBAC, intent and policy checks succeeded.",
     )
