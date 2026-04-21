@@ -1,7 +1,7 @@
 from typing import Any, Dict
 from sqlalchemy.orm import Session
 
-from app.mcp.models import AuthorizationDecision
+from app.policy.models import AuthorizationDecision
 from app.models.employee_model import Employee
 from app.policy.rules import evaluate_delete_limit_policy, evaluate_salary_raise_policy
 from app.models.rbac_models import User

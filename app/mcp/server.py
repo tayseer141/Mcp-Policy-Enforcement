@@ -1,82 +1,151 @@
-from sqlalchemy.orm import Session
-from app.models.rbac_models import User
-from app.mcp.models import (
-    ToolCallRequest,
-    ToolCallResponse,
-    AuthorizationDecision,
+import logging
+import sys
+from typing import Optional
+
+from mcp.server.fastmcp import FastMCP
+
+from app.db.session import engine, SessionLocal
+from app.db.base import Base
+from app.db.seed import seed_data
+from app.services.local_tool_executor import execute_tool_locally
+
+# Force SQLAlchemy to register all model classes on the Base metadata
+# so create_all() sees every table.
+import app.models.rbac_models  # noqa: F401
+import app.models.employee_model  # noqa: F401
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    stream=sys.stdout,
 )
-from app.mcp.registry import registry
-from app.mcp.dispatcher import dispatch_tool
-from app.policy.engine import authorize_tool_request
+logger = logging.getLogger("mcp-server")
 
 
-class MCPServer:
-    def list_tools(self):
-        return registry.list_tools()
+# --- Bootstrap DB schema + seed (idempotent) ---
+# Runs at module load in whichever container imports this module.
+# seed_data() guards against re-seeding, so this is safe to run twice.
+logger.info("Bootstrapping database (create_all + seed)...")
+Base.metadata.create_all(bind=engine)
+_db = SessionLocal()
+try:
+    seed_data(_db)
+finally:
+    _db.close()
+logger.info("Database bootstrap complete.")
 
-    def call_tool(self, db: Session, request: ToolCallRequest) -> ToolCallResponse:
-        # 1. Resolve the tool from the registry
-        tool = registry.get_tool(request.tool_name)
 
-        if not tool:
-            return ToolCallResponse(
-                success=False,
-                tool_name=request.tool_name,
-                error=f"Unknown tool: {request.tool_name}",
-                authorization=AuthorizationDecision(
-                    allowed=False,
-                    stage="validation",
-                    reason="Tool is not registered in MCP registry.",
-                ),
-            )
+# --- MCP server definition ---
+mcp = FastMCP("policy-enforcement-mcp", json_response=True)
 
-        # 2. Fetch the user object from the DB
-        user = db.query(User).filter(User.username == request.context.username).first()
-        if not user:
-            return ToolCallResponse(
-                success=False,
-                tool_name=request.tool_name,
-                error="User not found",
-                authorization=AuthorizationDecision(
-                    allowed=False,
-                    stage="rbac",
-                    reason=f"User '{request.context.username}' does not exist.",
-                ),
-            )
 
-        # 3. Perform Multi-Layer Authorization (RBAC + Policy)
-        authorization = authorize_tool_request(
+@mcp.tool()
+def health_check(username: str) -> dict:
+    """Check if the MCP server and DB are responsive."""
+    return {
+        "status": "ok",
+        "server": "policy-enforcement-mcp",
+        "username": username,
+    }
+
+
+@mcp.tool()
+def get_employees(username: str) -> list[dict]:
+    """Retrieve all employee records (Requires 'get_employees' permission)."""
+    db = SessionLocal()
+    try:
+        return execute_tool_locally(
             db=db,
-            user=user,
-            tool_name=request.tool_name,
-            required_permission=tool.required_permission,
-            arguments=request.arguments,
+            username=username,
+            tool_name="get_employees",
+            required_permission="get_employees",
+            arguments={},
         )
-
-        if not authorization.allowed:
-            return ToolCallResponse(
-                success=False,
-                tool_name=request.tool_name,
-                result=None,
-                error=f"Access denied: {authorization.reason}",
-                authorization=authorization,
-            )
-        # 4. Dispatch Execution
-        try:
-            result = dispatch_tool(db, request.tool_name, request.arguments)
-            return ToolCallResponse(
-                success=True,
-                tool_name=request.tool_name,
-                result=result,
-                authorization=authorization,
-            )
-        except Exception as e:
-            return ToolCallResponse(
-                success=False,
-                tool_name=request.tool_name,
-                error=str(e),
-                authorization=authorization, # Still includes the reason it was allowed
-            )
+    finally:
+        db.close()
 
 
-mcp_server = MCPServer()
+@mcp.tool()
+def get_employee_by_id(username: str, employee_id: int) -> dict:
+    """Retrieve a single employee by ID (Requires 'get_employee_by_id' permission)."""
+    db = SessionLocal()
+    try:
+        return execute_tool_locally(
+            db=db,
+            username=username,
+            tool_name="get_employee_by_id",
+            required_permission="get_employee_by_id",
+            arguments={"employee_id": employee_id},
+        )
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def update_salary(username: str, employee_id: int, new_salary: int) -> dict:
+    """Update an employee's salary. Enforces RBAC and the 20% max raise policy."""
+    db = SessionLocal()
+    try:
+        return execute_tool_locally(
+            db=db,
+            username=username,
+            tool_name="update_salary",
+            required_permission="update_salary",
+            arguments={
+                "employee_id": employee_id,
+                "new_salary": new_salary,
+            },
+        )
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def delete_employee(
+    username: str,
+    employee_id: Optional[int] = None,
+    employee_ids: Optional[list[int]] = None,
+    delete_all: bool = False,
+) -> dict:
+    """
+    Delete one or more employee records.
+    Enforces RBAC and the mass-deletion policy (max 1 record by default).
+
+    Provide exactly one of: employee_id (single), employee_ids (list),
+    or delete_all=True (will be blocked by the policy engine).
+    """
+    arguments: dict = {}
+    if employee_id is not None:
+        arguments["employee_id"] = employee_id
+    if employee_ids is not None:
+        arguments["employee_ids"] = employee_ids
+    if delete_all:
+        arguments["delete_all"] = True
+
+    db = SessionLocal()
+    try:
+        return execute_tool_locally(
+            db=db,
+            username=username,
+            tool_name="delete_employee",
+            required_permission="delete_employee",
+            arguments=arguments,
+        )
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Expose the ASGI app.
+#
+# FastMCP's streamable_http_app() already serves the MCP endpoint at /mcp
+# (its default `settings.streamable_http_path`). It also installs its own
+# lifespan that runs `session_manager.run()`, which is required for the
+# Streamable HTTP transport to work.
+#
+# DO NOT wrap this in `Starlette(routes=[Mount("/mcp", app=...)])` -- that
+# strips the /mcp prefix and ends up serving the real endpoint at /mcp/mcp,
+# which was the "404 Not Found" bug you saw in the logs.
+# ---------------------------------------------------------------------------
+app = mcp.streamable_http_app()

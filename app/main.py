@@ -10,7 +10,6 @@ from app.api.employees import router as employees_router
 from app.api.demo import router as demo_router
 from app.api.mcp import router as mcp_router
 from app.api.rbac_admin import router as rbac_admin_router
-from app.mcp.registry import register_default_tools
 
 import app.models.rbac_models
 import app.models.employee_model
@@ -26,8 +25,8 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
     
-    print("Registering MCP tools...")
-    register_default_tools()
+    print("MCP Tools are managed by the dedicated MCP Server.")
+    # The official MCP server handles its own tool registration
     
     print("Application is ready!")
     

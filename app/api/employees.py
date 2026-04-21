@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import Dict, Any
+from typing import List, Dict, Any
 
 from app.db.deps import get_db
 from app.models.employee_model import Employee
@@ -19,13 +19,13 @@ def get_user_or_404(db: Session, username: str) -> User:
 def get_employees(username: str, db: Session = Depends(get_db)):
     user = get_user_or_404(db, username)
     
-    # Check authorization using the new engine
+    # Check authorization using the Policy Engine
     decision = authorize_tool_request(
         db=db,
         user=user,
         tool_name="get_employees",
         required_permission="get_employees",
-        arguments={} # No specific arguments for a general list
+        arguments={}
     )
     
     if not decision.allowed:
@@ -42,40 +42,12 @@ def get_employees(username: str, db: Session = Depends(get_db)):
         for emp in employees
     ]
 
-
-@router.get("/{employee_id}")
-def get_employee_by_id(employee_id: int, username: str, db: Session = Depends(get_db)):
-    user = get_user_or_404(db, username)
-    args = {"employee_id": employee_id}
-    
-    decision = authorize_tool_request(
-        db=db,
-        user=user,
-        tool_name="get_employee_by_id",
-        required_permission="get_employee_by_id",
-        arguments=args
-    )
-    
-    if not decision.allowed:
-        raise HTTPException(status_code=403, detail=decision.reason)
-
-    employee = db.query(Employee).filter(Employee.id == employee_id).first()
-    if not employee:
-        raise HTTPException(status_code=404, detail="Employee not found")
-
-    return {
-        "id": employee.id,
-        "name": employee.name,
-        "department": employee.department,
-        "salary": employee.salary,
-    }
-
-
 @router.put("/{employee_id}/salary")
 def update_salary(employee_id: int, username: str, new_salary: int, db: Session = Depends(get_db)):
     user = get_user_or_404(db, username)
     args = {"employee_id": employee_id, "new_salary": new_salary}
     
+    # 🛡️ THE SECURITY HEART: This calls the 20% raise check
     decision = authorize_tool_request(
         db=db,
         user=user,
@@ -105,12 +77,12 @@ def update_salary(employee_id: int, username: str, new_salary: int, db: Session 
         },
     }
 
-
 @router.delete("/{employee_id}")
 def delete_employee(employee_id: int, username: str, db: Session = Depends(get_db)):
     user = get_user_or_404(db, username)
     args = {"employee_id": employee_id}
     
+    # 🛡️ This calls the "Mass Deletion" check
     decision = authorize_tool_request(
         db=db,
         user=user,
@@ -120,8 +92,6 @@ def delete_employee(employee_id: int, username: str, db: Session = Depends(get_d
     )
     
     if not decision.allowed:
-        # This will now return your academically strong message:
-        # e.g., "Delete request exceeds the allowed maximum..."
         raise HTTPException(status_code=403, detail=decision.reason)
 
     employee = db.query(Employee).filter(Employee.id == employee_id).first()
@@ -131,6 +101,4 @@ def delete_employee(employee_id: int, username: str, db: Session = Depends(get_d
     db.delete(employee)
     db.commit()
 
-    return {
-        "message": f"Employee with id {employee_id} deleted successfully"
-    }
+    return {"message": f"Employee {employee_id} deleted successfully"}

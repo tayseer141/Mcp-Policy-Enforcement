@@ -2,7 +2,7 @@ import json
 from openai import OpenAI
 
 from app.core.config import settings
-from app.mcp.server import mcp_server
+from app.mcp.server import mcp
 
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
@@ -14,24 +14,75 @@ Do not invent new tools.
 Do not explain the answer in natural language if a tool is appropriate.
 Prefer the safest and most specific tool.
 If no tool is appropriate, do not call any tool.
+
+IMPORTANT: Never provide a value for the `username` parameter. It will be
+injected by the server from the authenticated session. Focus only on the
+operational parameters (employee_id, new_salary, etc.).
 """
+
+
+def _extract_tool_parameters(tool) -> dict:
+    """
+    Extract a JSON-schema parameters object from a FastMCP tool across
+    SDK shape differences.
+    """
+    for attr in ("parameters", "input_schema", "inputSchema"):
+        value = getattr(tool, attr, None)
+        if isinstance(value, dict):
+            return value
+
+    if hasattr(tool, "model_dump"):
+        dumped = tool.model_dump(by_alias=True)
+        for key in ("parameters", "input_schema", "inputSchema"):
+            value = dumped.get(key)
+            if isinstance(value, dict):
+                return value
+
+    return {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    }
+
+
+def _strip_username_from_schema(schema: dict) -> dict:
+    """
+    Hide the `username` parameter from the LLM. Identity is established by
+    the authenticated session, not by anything the model produces.
+    """
+    if not isinstance(schema, dict):
+        return schema
+
+    clean = dict(schema)
+    props = dict(clean.get("properties", {}))
+    props.pop("username", None)
+    clean["properties"] = props
+
+    required = [r for r in clean.get("required", []) if r != "username"]
+    clean["required"] = required
+
+    return clean
 
 
 def build_openai_tools_from_mcp():
     """
-    Convert registered MCP tools into the format expected by OpenAI chat.completions.
+    Convert registered MCP tools into the format expected by OpenAI.
+    Uses the currently registered FastMCP tools.
     """
     tools = []
 
-    for tool in mcp_server.list_tools():
+    for tool in mcp._tool_manager._tools.values():
+        parameters = _extract_tool_parameters(tool)
+        parameters = _strip_username_from_schema(parameters)
+
         tools.append(
             {
                 "type": "function",
                 "function": {
                     "name": tool.name,
-                    "description": tool.description,
-                    "parameters": tool.input_schema,
-                }
+                    "description": tool.description or "",
+                    "parameters": parameters,
+                },
             }
         )
 
@@ -48,7 +99,7 @@ def select_tool_from_prompt(prompt: str):
         return {
             "tool_name": None,
             "arguments": {},
-            "raw_output_text": "No tools available from MCP registry."
+            "raw_output_text": "No tools available from MCP registry.",
         }
 
     try:
@@ -80,15 +131,18 @@ def select_tool_from_prompt(prompt: str):
             except json.JSONDecodeError:
                 selected_arguments = {}
 
+            # Defensive: drop any username the LLM slipped in despite instructions.
+            selected_arguments.pop("username", None)
+
         return {
             "tool_name": selected_tool_name,
             "arguments": selected_arguments,
-            "raw_output_text": message.content if message.content else ""
+            "raw_output_text": message.content if message.content else "",
         }
 
     except Exception as e:
         return {
             "tool_name": None,
             "arguments": {},
-            "raw_output_text": f"OpenAI error: {str(e)}"
+            "raw_output_text": f"OpenAI error: {str(e)}",
         }
