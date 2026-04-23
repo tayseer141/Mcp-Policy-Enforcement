@@ -5,6 +5,7 @@ from fastapi.templating import Jinja2Templates
 import json
 
 from app.db.deps import get_db
+from app.models.rbac_models import User
 from app.services.openai_service import select_tool_from_prompt
 from app.services.tool_service import run_tool_for_user
 
@@ -12,8 +13,25 @@ router = APIRouter(tags=["demo"])
 templates = Jinja2Templates(directory="app/templates")
 
 
+def _load_users(db: Session) -> list[dict]:
+    """
+    Return the current user list from the DB so the demo dropdown is
+    always in sync with whatever the admin dashboard has created. Kept
+    as a plain list of dicts so the template doesn't rely on the ORM
+    object lifecycle.
+    """
+    rows = db.query(User).order_by(User.username.asc()).all()
+    return [
+        {
+            "username": u.username,
+            "role": u.role.name if u.role else None,
+        }
+        for u in rows
+    ]
+
+
 @router.get("/demo", response_class=HTMLResponse)
-def demo_page(request: Request):
+def demo_page(request: Request, db: Session = Depends(get_db)):
     """Renders the secure MCP demo interface."""
     return templates.TemplateResponse(
         "demo.html",
@@ -21,6 +39,7 @@ def demo_page(request: Request):
             "request": request,
             "title": "MCP Secure Demo",
             "result": None,
+            "users": _load_users(db),
         },
     )
 
@@ -62,7 +81,12 @@ def run_demo(
         }
         return templates.TemplateResponse(
             "demo.html",
-            {"request": request, "title": "MCP Secure Demo", "result": result},
+            {
+                "request": request,
+                "title": "MCP Secure Demo",
+                "result": result,
+                "users": _load_users(db),
+            },
         )
 
     # Step 2: Secure Execution Path (web -> MCP server -> policy engine -> DB)
@@ -119,5 +143,10 @@ def run_demo(
 
     return templates.TemplateResponse(
         "demo.html",
-        {"request": request, "title": "MCP Secure Demo", "result": result},
+        {
+            "request": request,
+            "title": "MCP Secure Demo",
+            "result": result,
+            "users": _load_users(db),
+        },
     )

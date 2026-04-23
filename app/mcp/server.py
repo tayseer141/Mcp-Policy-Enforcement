@@ -155,5 +155,41 @@ def delete_employee(
         db.close()
 
 
+# --- Auto-sync permissions from registered tools -----------------------
+# Permissions in this system are a property of tools, not something an
+# admin invents. Every @mcp.tool()-registered function should have a
+# matching Permission row so the RBAC engine can grant it to a role.
+# We scan the registry on boot and upsert anything missing. Safe to run
+# on every start: idempotent, cheap, and self-healing if a permission
+# gets deleted.
+
+def _sync_permissions_from_tools(db, tool_names) -> int:
+    from app.models.rbac_models import Permission
+
+    existing = {p.name for p in db.query(Permission).all()}
+    created = 0
+    for name in tool_names:
+        if name in existing:
+            continue
+        db.add(Permission(name=name))
+        created += 1
+    if created:
+        db.commit()
+    return created
+
+
+logger.info("Auto-syncing permissions from registered MCP tools...")
+_db = SessionLocal()
+try:
+    tool_names = list(mcp._tool_manager._tools.keys())
+    added = _sync_permissions_from_tools(_db, tool_names)
+    if added:
+        logger.info(f"Created {added} missing permission row(s): {tool_names}")
+    else:
+        logger.info(f"All {len(tool_names)} tool permissions already present.")
+finally:
+    _db.close()
+
+
 # Expose the ASGI app. FastMCP serves the MCP endpoint at /mcp by default.
 app = mcp.streamable_http_app()

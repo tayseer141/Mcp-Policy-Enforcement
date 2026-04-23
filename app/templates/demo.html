@@ -80,9 +80,11 @@
         <form method="post" action="/demo">
             <label for="username">Select user</label>
             <select name="username" id="username" required>
-                <option value="admin_user">admin_user</option>
-                <option value="manager_user">manager_user</option>
-                <option value="guest_user">guest_user</option>
+                {% for u in users %}
+                    <option value="{{ u.username }}">
+                        {{ u.username }}{% if u.role %} ({{ u.role }}){% endif %}
+                    </option>
+                {% endfor %}
             </select>
 
             <label for="prompt">Enter natural-language request</label>

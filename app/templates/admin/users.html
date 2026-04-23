@@ -2,14 +2,19 @@
 {% block content %}
   <h1>Users</h1>
 
-  {% if notice == "role_updated" %}
-    <div class="notice">Role updated.</div>
-  {% elif notice == "user_not_found" %}
-    <div class="notice error">That user was not found.</div>
-  {% elif notice == "role_not_found" %}
-    <div class="notice error">That role was not found.</div>
-  {% elif notice == "cannot_demote_self" %}
-    <div class="notice error">You cannot demote your own admin account.</div>
+  {% set NOTICES = {
+    "user_created": ("ok", "User created."),
+    "user_exists": ("err", "A user with that username already exists."),
+    "user_not_found": ("err", "That user was not found."),
+    "role_not_found": ("err", "That role was not found."),
+    "role_updated": ("ok", "Role updated."),
+    "user_deleted": ("ok", "User deleted."),
+    "cannot_delete_self": ("err", "You cannot delete your own admin account."),
+    "cannot_demote_self": ("err", "You cannot demote your own admin account."),
+    "invalid_username": ("err", "Username cannot be empty."),
+  } %}
+  {% if notice and notice in NOTICES %}
+    <div class="notice {% if NOTICES[notice][0] == 'err' %}error{% endif %}">{{ NOTICES[notice][1] }}</div>
   {% endif %}
 
   <table>
@@ -19,12 +24,13 @@
         <th>Current role</th>
         <th>Assigned permissions</th>
         <th>Reassign role</th>
+        <th class="right">Remove</th>
       </tr>
     </thead>
     <tbody>
       {% for u in users %}
         <tr>
-          <td><strong>{{ u.username }}</strong></td>
+          <td><strong>{{ u.username }}</strong>{% if u.id == admin_user.id %} <span class="pill stage">you</span>{% endif %}</td>
           <td>
             {% if u.role %}
               <span class="pill stage">{{ u.role.name }}</span>
@@ -52,13 +58,40 @@
               <button type="submit" class="btn secondary">Save</button>
             </form>
           </td>
+          <td class="right">
+            {% if u.id != admin_user.id %}
+              <form method="post" action="/admin/users/delete" style="display:inline;"
+                    onsubmit="return confirm('Delete user {{ u.username }}?');">
+                <input type="hidden" name="target_username" value="{{ u.username }}">
+                <button type="submit" class="btn secondary" style="color: var(--deny); border-color: rgba(239,68,68,0.4);">Delete</button>
+              </form>
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
         </tr>
       {% endfor %}
     </tbody>
   </table>
 
+  <h2>Create user</h2>
+  <form method="post" action="/admin/users/create" class="inline">
+    <label>
+      Username
+      <input type="text" name="new_username" required>
+    </label>
+    <label>
+      Role
+      <select name="role_name" required>
+        {% for r in roles %}
+          <option value="{{ r.name }}">{{ r.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="btn">Create user</button>
+  </form>
+
   <p class="muted" style="margin-top: 16px; font-size: 12px;">
-    Role changes take effect immediately. The dashboard itself also enforces the <code>admin</code> role
-    via the same RBAC table shown here.
+    All RBAC changes made here take effect on the next MCP request — the policy engine reads the current role/permission state on every call.
   </p>
 {% endblock %}

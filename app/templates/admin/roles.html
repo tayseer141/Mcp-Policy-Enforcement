@@ -5,34 +5,85 @@
     Each role is a bag of permissions. When a tool call comes in, the policy engine checks whether the caller's role has the permission matching the tool name.
   </p>
 
+  {% set NOTICES = {
+    "role_created": ("ok", "Role created."),
+    "role_deleted": ("ok", "Role deleted."),
+    "role_exists": ("err", "A role with that name already exists."),
+    "role_not_found": ("err", "That role was not found."),
+    "role_has_users": ("err", "Cannot delete a role that still has users assigned."),
+    "cannot_delete_admin_role": ("err", "The admin role cannot be deleted."),
+    "permission_deleted": ("ok", "Permission deleted."),
+    "permission_not_found": ("err", "That permission was not found."),
+    "permission_added": ("ok", "Permission attached to role."),
+    "permission_removed": ("ok", "Permission removed from role."),
+    "permission_already_assigned": ("err", "That permission is already on the role."),
+    "permission_not_on_role": ("err", "That permission is not currently on the role."),
+    "invalid_name": ("err", "Name cannot be empty."),
+  } %}
+  {% if notice and notice in NOTICES %}
+    <div class="notice {% if NOTICES[notice][0] == 'err' %}error{% endif %}">{{ NOTICES[notice][1] }}</div>
+  {% endif %}
+
+  <h2>Roles</h2>
   <table>
     <thead>
       <tr>
         <th>Role</th>
         <th>Permissions</th>
-        <th>Users in this role</th>
+        <th>Users</th>
+        <th class="right">Remove role</th>
       </tr>
     </thead>
     <tbody>
       {% for r in roles %}
         <tr>
-          <td><strong>{{ r.name }}</strong></td>
+          <td><strong>{{ r.name }}</strong>{% if r.name == admin_role_name %} <span class="pill stage">system</span>{% endif %}</td>
           <td>
             {% if r.permissions %}
               {% for p in r.permissions %}
-                <code class="mono">{{ p.name }}</code>{% if not loop.last %} &nbsp; {% endif %}
+                <span class="pill stage" style="margin-right: 4px;">
+                  <code class="mono" style="color: var(--text);">{{ p.name }}</code>
+                  <form method="post" action="/admin/roles/remove-permission" style="display: inline; margin-left: 4px;"
+                        onsubmit="return confirm('Remove {{ p.name }} from {{ r.name }}?');">
+                    <input type="hidden" name="role_name" value="{{ r.name }}">
+                    <input type="hidden" name="permission_name" value="{{ p.name }}">
+                    <button type="submit" title="Remove permission"
+                            style="background:transparent; border:0; color: var(--muted); cursor:pointer; padding:0 2px;">×</button>
+                  </form>
+                </span>
               {% endfor %}
             {% else %}
               <span class="muted">— none —</span>
             {% endif %}
+
+            <form method="post" action="/admin/roles/add-permission" class="inline" style="margin-top: 8px;">
+              <input type="hidden" name="role_name" value="{{ r.name }}">
+              <select name="permission_name" required>
+                {% for p in all_permissions %}
+                  {% if p not in r.permissions %}
+                    <option value="{{ p.name }}">{{ p.name }}</option>
+                  {% endif %}
+                {% endfor %}
+              </select>
+              <button type="submit" class="btn secondary">+ add</button>
+            </form>
           </td>
           <td class="muted">
             {% if r.users %}
-              {% for u in r.users %}
-                {{ u.username }}{% if not loop.last %}, {% endif %}
-              {% endfor %}
+              {% for u in r.users %}{{ u.username }}{% if not loop.last %}, {% endif %}{% endfor %}
             {% else %}
               —
+            {% endif %}
+          </td>
+          <td class="right">
+            {% if r.name != admin_role_name %}
+              <form method="post" action="/admin/roles/delete" style="display:inline;"
+                    onsubmit="return confirm('Delete role {{ r.name }}?');">
+                <input type="hidden" name="name" value="{{ r.name }}">
+                <button type="submit" class="btn secondary" style="color: var(--deny); border-color: rgba(239,68,68,0.4);">Delete</button>
+              </form>
+            {% else %}
+              <span class="muted">—</span>
             {% endif %}
           </td>
         </tr>
@@ -40,10 +91,71 @@
     </tbody>
   </table>
 
-  <h2>All defined permissions</h2>
-  <p class="muted">
-    {% for p in all_permissions %}
-      <code class="mono">{{ p.name }}</code>{% if not loop.last %} &nbsp;&middot;&nbsp; {% endif %}
-    {% endfor %}
+  <h2>Create role</h2>
+  <form method="post" action="/admin/roles/create" class="inline">
+    <label>
+      Role name
+      <input type="text" name="name" required placeholder="e.g. auditor">
+    </label>
+    <button type="submit" class="btn">Create role</button>
+  </form>
+
+  <h2>Permissions</h2>
+  <div class="notice" style="margin-top: 0;">
+    <strong>Permissions come from tools, not from this UI.</strong>
+    Every <code class="mono">@mcp.tool()</code> function in
+    <code class="mono">app/mcp/server.py</code> is auto-synced to a matching permission
+    on server startup. To add a new permission, register a new MCP tool in code —
+    it will appear here on the next boot. The admin's job is to assign these
+    permissions to the right roles.
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Permission</th>
+        <th>Source</th>
+        <th>Used in roles</th>
+        <th class="right">Remove</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in all_permissions %}
+        <tr>
+          <td><code class="mono">{{ p.name }}</code></td>
+          <td>
+            {% if p.name in tool_backed_permissions %}
+              <span class="pill allow" title="This permission matches a registered MCP tool and will be re-created on next boot if deleted.">auto-synced from tool</span>
+            {% else %}
+              <span class="pill deny" title="No tool matches this permission name, so it currently unlocks nothing.">orphan</span>
+            {% endif %}
+          </td>
+          <td class="muted">
+            {% set roles_using = [] %}
+            {% for r in roles %}
+              {% if p in r.permissions %}{% set _ = roles_using.append(r.name) %}{% endif %}
+            {% endfor %}
+            {% if roles_using %}
+              {% for rn in roles_using %}<span class="pill stage">{{ rn }}</span>{% endfor %}
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+          <td class="right">
+            <form method="post" action="/admin/permissions/delete" style="display:inline;"
+                  onsubmit="return confirm(
+                    '{% if p.name in tool_backed_permissions %}This permission is backed by a registered tool and will be re-created on next server start. Delete anyway?{% else %}Delete permission {{ p.name }}? It will be detached from every role.{% endif %}'
+                  );">
+              <input type="hidden" name="name" value="{{ p.name }}">
+              <button type="submit" class="btn secondary" style="color: var(--deny); border-color: rgba(239,68,68,0.4);">Delete</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <p class="muted" style="margin-top: 16px; font-size: 12px;">
+    Changes to roles and role↔permission assignments take effect on the next MCP request — the policy engine re-reads RBAC state on every call.
   </p>
 {% endblock %}
