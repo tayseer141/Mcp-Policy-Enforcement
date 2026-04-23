@@ -1,0 +1,71 @@
+{% extends "admin/base.html" %}
+{% block content %}
+  <h1>Overview</h1>
+
+  <div class="cards">
+    <div class="card">
+      <div class="label">Total decisions</div>
+      <div class="value">{{ counters.total }}</div>
+    </div>
+    <div class="card allow">
+      <div class="label">Allowed</div>
+      <div class="value">{{ counters.allows }}</div>
+    </div>
+    <div class="card deny">
+      <div class="label">Denied</div>
+      <div class="value">{{ counters.denies }}</div>
+    </div>
+    <div class="card stage">
+      <div class="label">Denies by stage</div>
+      <div class="value">
+        {% if counters.deny_by_stage %}
+          {% for stage, count in counters.deny_by_stage.items() %}
+            <span class="pill stage" title="{{ stage }}">{{ stage }}: {{ count }}</span>
+          {% endfor %}
+        {% else %}
+          <span class="muted" style="font-size: 14px;">none yet</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <h2>Most recent decisions</h2>
+
+  {% if not recent %}
+    <div class="notice">No audit rows yet. Try running a few prompts on <a href="/demo">/demo</a>.</div>
+  {% else %}
+    <table>
+      <thead>
+        <tr>
+          <th>Time (UTC)</th>
+          <th>User</th>
+          <th>Tool</th>
+          <th>Decision</th>
+          <th>Stage</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in recent %}
+          <tr>
+            <td class="nowrap"><small class="ts">{{ row.timestamp.strftime("%Y-%m-%d %H:%M:%S") }}</small></td>
+            <td>{{ row.username }}</td>
+            <td><code class="mono">{{ row.tool_name }}</code></td>
+            <td>
+              {% if row.allowed %}
+                <span class="pill allow">ALLOW</span>
+              {% else %}
+                <span class="pill deny">DENY</span>
+              {% endif %}
+            </td>
+            <td><span class="pill stage">{{ row.stage }}</span></td>
+            <td class="muted">{{ row.reason }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="right" style="margin-top: 10px;">
+      <a href="/admin/audit">View the full audit log →</a>
+    </p>
+  {% endif %}
+{% endblock %}

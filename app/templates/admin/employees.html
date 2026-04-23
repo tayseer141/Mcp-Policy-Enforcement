@@ -1,0 +1,33 @@
+{% extends "admin/base.html" %}
+{% block content %}
+  <h1>Employees</h1>
+  <p class="muted" style="margin-top: -8px;">
+    The underlying dataset the policy engine protects. Changes here should go through the MCP tools — this view is read-only.
+  </p>
+
+  {% if not employees %}
+    <div class="notice">No employees in the database.</div>
+  {% else %}
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Department</th>
+          <th class="right">Salary</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for emp in employees %}
+          <tr>
+            <td><code class="mono">{{ emp.id }}</code></td>
+            <td>{{ emp.name }}</td>
+            <td class="muted">{{ emp.department }}</td>
+            <td class="right"><code class="mono">{{ "{:,}".format(emp.salary) }}</code></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="muted right" style="margin-top: 10px;">{{ employees|length }} employee(s)</p>
+  {% endif %}
+{% endblock %}

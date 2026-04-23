@@ -1,0 +1,49 @@
+{% extends "admin/base.html" %}
+{% block content %}
+  <h1>Roles &amp; permissions</h1>
+  <p class="muted" style="margin-top: -8px;">
+    Each role is a bag of permissions. When a tool call comes in, the policy engine checks whether the caller's role has the permission matching the tool name.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Role</th>
+        <th>Permissions</th>
+        <th>Users in this role</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in roles %}
+        <tr>
+          <td><strong>{{ r.name }}</strong></td>
+          <td>
+            {% if r.permissions %}
+              {% for p in r.permissions %}
+                <code class="mono">{{ p.name }}</code>{% if not loop.last %} &nbsp; {% endif %}
+              {% endfor %}
+            {% else %}
+              <span class="muted">— none —</span>
+            {% endif %}
+          </td>
+          <td class="muted">
+            {% if r.users %}
+              {% for u in r.users %}
+                {{ u.username }}{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>All defined permissions</h2>
+  <p class="muted">
+    {% for p in all_permissions %}
+      <code class="mono">{{ p.name }}</code>{% if not loop.last %} &nbsp;&middot;&nbsp; {% endif %}
+    {% endfor %}
+  </p>
+{% endblock %}

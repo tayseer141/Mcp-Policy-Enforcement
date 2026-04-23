@@ -7,7 +7,7 @@ def seed_data(db: Session):
     if db.query(Role).first():
         return
 
-    admin_role = Role(name="Admin")
+    admin_role = Role(name="admin")
     manager_role = Role(name="Manager")
     guest_role = Role(name="Guest")
 

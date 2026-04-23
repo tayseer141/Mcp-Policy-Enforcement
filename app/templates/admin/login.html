@@ -1,0 +1,26 @@
+{% extends "admin/base.html" %}
+{% block content %}
+  <div style="max-width: 380px; margin: 10vh auto 0; background: var(--panel); border: 1px solid var(--border); padding: 28px; border-radius: 10px;">
+    <h1 style="margin-bottom: 6px;">Admin dashboard</h1>
+    <p class="muted" style="margin-top: 0;">Sign in with an admin username to view the security audit log.</p>
+
+    {% if error == "unknown_user" %}
+      <div class="notice error">That username is not registered in the system.</div>
+    {% elif error == "not_admin" %}
+      <div class="notice error">That user is not in the <code>admin</code> role.</div>
+    {% endif %}
+
+    <form method="post" action="/admin/login" style="display: flex; flex-direction: column; gap: 12px;">
+      <label style="display: flex; flex-direction: column; gap: 6px;">
+        <span class="muted" style="font-size: 12px;">Username</span>
+        <input type="text" name="username" autofocus autocomplete="username" required
+               style="background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 10px 12px; border-radius: 6px; font-size: 14px;">
+      </label>
+      <button type="submit" class="btn">Sign in</button>
+    </form>
+
+    <p class="muted" style="font-size: 12px; margin-top: 20px;">
+      Access is gated by the same RBAC system the MCP tools use — your role must be <code>admin</code>.
+    </p>
+  </div>
+{% endblock %}

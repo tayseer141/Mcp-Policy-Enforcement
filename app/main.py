@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.db.session import engine, SessionLocal
@@ -9,7 +9,7 @@ from app.db.seed import seed_data
 from app.api.employees import router as employees_router
 from app.api.demo import router as demo_router
 from app.api.mcp import router as mcp_router
-from app.api.rbac_admin import router as rbac_admin_router
+from app.api.admin import router as admin_router
 
 import app.models.rbac_models
 import app.models.employee_model
@@ -43,7 +43,7 @@ app = FastAPI(
 app.include_router(employees_router)
 app.include_router(demo_router)
 app.include_router(mcp_router)
-app.include_router(rbac_admin_router)
+app.include_router(admin_router)
 
 templates = Jinja2Templates(directory="app/templates")
 
@@ -61,3 +61,15 @@ async def home(request: Request):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+@app.exception_handler(HTTPException)
+async def _admin_auth_redirect(request: Request, exc: HTTPException):
+    if (
+        request.url.path.startswith("/admin")
+        and exc.status_code in (401, 403)
+        and exc.detail in ("admin_login_required", "admin_role_required")
+    ):
+        return RedirectResponse(url="/admin/login", status_code=303)
+    # fall back to FastAPI's default behavior
+    from fastapi.exception_handlers import http_exception_handler
+    return await http_exception_handler(request, exc)

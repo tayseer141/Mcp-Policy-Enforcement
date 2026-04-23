@@ -150,7 +150,39 @@ def authorize_tool_request(
     """
     Policy Decision Point.
     Runs the three stages in order: RBAC -> Intent -> Policy.
+
+    Every final decision (allow or deny, any stage) is persisted to the
+    audit log so the admin dashboard can reconstruct the security story.
     """
+    decision = _decide(db, user, tool_name, required_permission, arguments)
+
+    # Best-effort audit logging. Imported locally to avoid any circular
+    # import risk between the engine and the audit service.
+    try:
+        from app.services.audit_service import record_decision
+
+        record_decision(
+            db=db,
+            username=user.username,
+            tool_name=tool_name,
+            arguments=arguments,
+            decision=decision,
+            raw_prompt=arguments.get(RAW_PROMPT_ARG_KEY),
+        )
+    except Exception:  # pragma: no cover - never let audit failures block auth
+        pass
+
+    return decision
+
+
+def _decide(
+    db: Session,
+    user: User,
+    tool_name: str,
+    required_permission: str,
+    arguments: Dict[str, Any],
+) -> AuthorizationDecision:
+    """Pure decision pipeline, separated so the audit wrapper stays tidy."""
     rbac_decision = check_rbac(db, user, required_permission)
     if not rbac_decision.allowed:
         return rbac_decision

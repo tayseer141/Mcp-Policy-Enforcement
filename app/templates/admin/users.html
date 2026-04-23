@@ -1,0 +1,64 @@
+{% extends "admin/base.html" %}
+{% block content %}
+  <h1>Users</h1>
+
+  {% if notice == "role_updated" %}
+    <div class="notice">Role updated.</div>
+  {% elif notice == "user_not_found" %}
+    <div class="notice error">That user was not found.</div>
+  {% elif notice == "role_not_found" %}
+    <div class="notice error">That role was not found.</div>
+  {% elif notice == "cannot_demote_self" %}
+    <div class="notice error">You cannot demote your own admin account.</div>
+  {% endif %}
+
+  <table>
+    <thead>
+      <tr>
+        <th>Username</th>
+        <th>Current role</th>
+        <th>Assigned permissions</th>
+        <th>Reassign role</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+        <tr>
+          <td><strong>{{ u.username }}</strong></td>
+          <td>
+            {% if u.role %}
+              <span class="pill stage">{{ u.role.name }}</span>
+            {% else %}
+              <span class="pill deny">none</span>
+            {% endif %}
+          </td>
+          <td class="muted">
+            {% if u.role and u.role.permissions %}
+              {% for p in u.role.permissions %}
+                <code class="mono">{{ p.name }}</code>{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td>
+            <form method="post" action="/admin/users/assign-role" class="inline" style="margin: 0;">
+              <input type="hidden" name="target_username" value="{{ u.username }}">
+              <select name="role_name">
+                {% for r in roles %}
+                  <option value="{{ r.name }}" {% if u.role and u.role.name == r.name %}selected{% endif %}>{{ r.name }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="btn secondary">Save</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <p class="muted" style="margin-top: 16px; font-size: 12px;">
+    Role changes take effect immediately. The dashboard itself also enforces the <code>admin</code> role
+    via the same RBAC table shown here.
+  </p>
+{% endblock %}

@@ -1,0 +1,101 @@
+{% extends "admin/base.html" %}
+{% block content %}
+  <h1>Audit log</h1>
+  <p class="muted" style="margin-top: -8px;">
+    Every authorization decision made by the policy engine. Both allows and denies are recorded.
+  </p>
+
+  <form class="inline" method="get" action="/admin/audit">
+    <label>
+      User
+      <select name="username">
+        <option value="">— any —</option>
+        {% for u in known_usernames %}
+          <option value="{{ u }}" {% if filters.username == u %}selected{% endif %}>{{ u }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Tool
+      <select name="tool_name">
+        <option value="">— any —</option>
+        {% for t in known_tools %}
+          <option value="{{ t }}" {% if filters.tool_name == t %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Stage
+      <select name="stage">
+        <option value="">— any —</option>
+        {% for s in known_stages %}
+          <option value="{{ s }}" {% if filters.stage == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Decision
+      <select name="decision">
+        <option value="">— any —</option>
+        <option value="allow" {% if filters.decision == "allow" %}selected{% endif %}>allow</option>
+        <option value="deny"  {% if filters.decision == "deny"  %}selected{% endif %}>deny</option>
+      </select>
+    </label>
+    <label>
+      Limit
+      <input type="number" name="limit" min="1" max="500" value="{{ filters.limit }}">
+    </label>
+    <button type="submit">Apply</button>
+    <a class="btn secondary" href="/admin/audit">Reset</a>
+  </form>
+
+  {% if not rows %}
+    <div class="notice">No rows match these filters.</div>
+  {% else %}
+    <table>
+      <thead>
+        <tr>
+          <th>Time (UTC)</th>
+          <th>User</th>
+          <th>Tool</th>
+          <th>Decision</th>
+          <th>Stage</th>
+          <th>Policy</th>
+          <th>Prompt</th>
+          <th>Arguments</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td class="nowrap"><small class="ts">{{ row.timestamp.strftime("%Y-%m-%d %H:%M:%S") }}</small></td>
+            <td>{{ row.username }}</td>
+            <td><code class="mono">{{ row.tool_name }}</code></td>
+            <td>
+              {% if row.allowed %}
+                <span class="pill allow">ALLOW</span>
+              {% else %}
+                <span class="pill deny">DENY</span>
+              {% endif %}
+            </td>
+            <td><span class="pill stage">{{ row.stage }}</span></td>
+            <td class="muted">{{ row.matched_policy or "—" }}</td>
+            <td style="max-width: 240px;">
+              {% if row.raw_prompt %}
+                <code class="mono">{{ row.raw_prompt }}</code>
+              {% else %}
+                <span class="muted">—</span>
+              {% endif %}
+            </td>
+            <td style="max-width: 280px;">
+              <code class="mono">{{ row.arguments_json }}</code>
+            </td>
+            <td style="max-width: 320px;" class="muted">{{ row.reason }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="muted right" style="margin-top: 10px;">{{ rows|length }} row(s)</p>
+  {% endif %}
+{% endblock %}

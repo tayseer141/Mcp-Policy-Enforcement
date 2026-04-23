@@ -13,6 +13,7 @@ from app.services.local_tool_executor import execute_tool_locally
 # so create_all() sees every table.
 import app.models.rbac_models  # noqa: F401
 import app.models.employee_model  # noqa: F401
+import app.models.audit_model  # noqa: F401  (admin dashboard audit trail)
 
 
 logging.basicConfig(
