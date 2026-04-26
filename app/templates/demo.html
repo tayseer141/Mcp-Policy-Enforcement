@@ -70,12 +70,52 @@
         .meta p {
             margin: 8px 0;
         }
+
+        /* Natural-language answer panel — shown only on ALLOW. */
+        .answer {
+            background: #ecfdf5;
+            border: 1px solid #a7f3d0;
+            border-left: 4px solid #059669;
+            border-radius: 10px;
+            padding: 14px 18px;
+            margin-top: 16px;
+        }
+        .answer-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: #047857;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+        .answer-text {
+            font-size: 16px;
+            line-height: 1.55;
+            color: #064e3b;
+            white-space: pre-wrap;
+        }
+
+        /* Collapsible "raw output" toggle so the JSON doesn't dominate
+           the page once the human-readable answer is the headline. */
+        details.raw-output {
+            margin-top: 14px;
+        }
+        details.raw-output summary {
+            cursor: pointer;
+            font-size: 13px;
+            color: #475569;
+            margin-bottom: 8px;
+            user-select: none;
+        }
+        details.raw-output summary:hover {
+            color: #1e293b;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>{{ title }}</h1>
-        <p>Natural-language request → OpenAI tool selection → RBAC + Policy Enforcement → safe execution.</p>
+        <p>Natural-language request → OpenAI tool selection → RBAC + Policy Enforcement → safe execution → natural-language answer.</p>
 
         <form method="post" action="/demo">
             <label for="username">Select user</label>
@@ -115,8 +155,24 @@
                 <p><strong>Matched Policy:</strong> {{ result.matched_policy or "N/A" }}</p>
             </div>
 
-            <p><strong>Final Output:</strong></p>
-            <pre>{{ result.final_output }}</pre>
+            {# Natural-language answer (functional req #4). Only shown on
+               ALLOW — denials and errors already carry a human-readable
+               message in final_output. dir="auto" lets the browser pick
+               LTR/RTL based on the actual answer text (Hebrew → RTL). #}
+            {% if result.human_summary %}
+                <div class="answer" dir="auto">
+                    <div class="answer-label">Answer</div>
+                    <div class="answer-text">{{ result.human_summary }}</div>
+                </div>
+
+                <details class="raw-output">
+                    <summary>Show raw tool output (JSON)</summary>
+                    <pre>{{ result.final_output }}</pre>
+                </details>
+            {% else %}
+                <p><strong>Final Output:</strong></p>
+                <pre>{{ result.final_output }}</pre>
+            {% endif %}
         </div>
         {% endif %}
     </div>

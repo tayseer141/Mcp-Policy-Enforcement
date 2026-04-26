@@ -160,3 +160,84 @@ def select_tool_from_prompt(prompt: str):
             "arguments": {},
             "raw_output_text": f"OpenAI error: {str(e)}",
         }
+
+
+# ---------------------------------------------------------------------
+# Natural-language response layer (functional req #4)
+# ---------------------------------------------------------------------
+# After a tool call succeeds, the raw tool output is almost always JSON.
+# For a demo / for end users, a plain-language summary of that JSON is
+# far more readable. This function asks the LLM to restate the result
+# in the same language the user wrote the prompt in.
+#
+# Fail-safe: if the LLM call errors for any reason, we return None and
+# the caller should just fall back to the raw JSON. We never let a
+# summarization failure break the response path.
+
+SUMMARY_SYSTEM_PROMPT = """
+You are a response formatter for a secure enterprise database assistant.
+
+You will be given:
+- The user's original natural-language request.
+- The name of the tool that was executed.
+- The structured (JSON) result returned by that tool.
+
+Your job is to restate the result for the user in clear, natural prose.
+
+Rules:
+- Reply in the SAME LANGUAGE the user used in their request (Hebrew if
+  they wrote in Hebrew, English if they wrote in English, etc.).
+- Be concise. 1-3 sentences is usually enough. For lists of records,
+  a short summary plus a small list is fine.
+- Do not invent data that is not in the JSON result. Do not speculate.
+- Do not describe the tool or the system. Speak as if you are directly
+  answering the user.
+- If the JSON is empty, say so plainly.
+- Do not wrap the answer in code blocks or JSON. Plain text only.
+""".strip()
+
+
+def summarize_tool_result(
+    prompt: str,
+    tool_name: str,
+    result: object,
+) -> str | None:
+    """
+    Produce a human-readable, same-language summary of a tool result.
+
+    Returns None on any error so the caller can fall back to raw JSON.
+    """
+    try:
+        if isinstance(result, (dict, list)):
+            result_text = json.dumps(result, ensure_ascii=False, indent=2)
+        else:
+            result_text = str(result)
+
+        # Keep payload bounded — very large results would blow up the
+        # context and cost. Truncate defensively.
+        if len(result_text) > 6000:
+            result_text = result_text[:6000] + "\n...[truncated]"
+
+        user_msg = (
+            f"User request:\n{prompt}\n\n"
+            f"Tool executed: {tool_name}\n\n"
+            f"Tool result (JSON):\n{result_text}\n\n"
+            f"Now write a short, natural-language answer to the user."
+        )
+
+        response = client.chat.completions.create(
+            model=settings.OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=0.2,
+        )
+        content = response.choices[0].message.content or ""
+        content = content.strip()
+        return content or None
+
+    except Exception:
+        # Summarization is a nice-to-have. Never let it break the
+        # request — the caller will fall back to the raw JSON.
+        return None

@@ -6,7 +6,7 @@ import json
 
 from app.db.deps import get_db
 from app.models.rbac_models import User
-from app.services.openai_service import select_tool_from_prompt
+from app.services.openai_service import select_tool_from_prompt, summarize_tool_result
 from app.services.tool_service import run_tool_for_user
 
 router = APIRouter(tags=["demo"])
@@ -78,6 +78,7 @@ def run_demo(
             "policy_decision": "DENY",
             "final_output": "The model could not map your request to an available secure tool.",
             "authorization_stage": "tool-selection",
+            "human_summary": None,
         }
         return templates.TemplateResponse(
             "demo.html",
@@ -91,7 +92,7 @@ def run_demo(
 
     # Step 2: Secure Execution Path (web -> MCP server -> policy engine -> DB)
     policy_decision = "DENY"
-    final_output = ""
+    final_output: object = ""
     auth_stage = "N/A"
 
     try:
@@ -124,7 +125,19 @@ def run_demo(
         final_output = f"Execution failed: {str(e)}"
         auth_stage = "system"
 
-    # Step 3: Formatting for UI Display
+    # Step 3: Natural-language response layer (functional req #4).
+    # Only summarize when the call was actually ALLOWed and succeeded.
+    # For denials and errors the message is already human-readable and
+    # security-relevant, so we leave it verbatim.
+    human_summary: str | None = None
+    if policy_decision == "ALLOW":
+        human_summary = summarize_tool_result(
+            prompt=prompt,
+            tool_name=tool_name,
+            result=final_output,
+        )
+
+    # Step 4: Formatting for UI Display
     if isinstance(final_output, (dict, list)):
         final_output = json.dumps(final_output, indent=2, ensure_ascii=False)
 
@@ -136,6 +149,7 @@ def run_demo(
         "policy_decision": policy_decision,
         "final_output": str(final_output),
         "authorization_stage": auth_stage,
+        "human_summary": human_summary,
     }
 
     print(f"Final Decision: {policy_decision} (stage={auth_stage})")
