@@ -1,5 +1,14 @@
 """
-Admin dashboard router.
+Admin dashboard router (HTML view layer).
+
+This module is the HTML face of the admin area. All data mutations now
+flow through the JSON API in app/api/admin_api.py — the templates
+intercept their forms and call those endpoints via fetch().
+
+This file owns:
+  - Session management (login/logout): these still work via form POST
+    because they set/clear an HttpOnly cookie and need to redirect.
+  - GET pages that render the admin shell with seeded data.
 
 Pages
 -----
@@ -9,32 +18,17 @@ POST /admin/logout                      clear the cookie
 
 GET  /admin                             overview (counters + recent decisions)
 GET  /admin/audit                       filterable audit log
-
-GET  /admin/users                       users & their assigned role
-POST /admin/users/create                create user + assign role
-POST /admin/users/assign-role           reassign a user's role
-POST /admin/users/delete                delete user (self-delete blocked)
-
-GET  /admin/roles                       roles, permissions, permission assignments
-POST /admin/roles/create                create role
-POST /admin/roles/delete                delete role (blocked if users assigned)
-POST /admin/roles/add-permission        attach permission to role
-POST /admin/roles/remove-permission     detach permission from role
-POST /admin/permissions/create          create permission
-POST /admin/permissions/delete          delete permission (blocked if in use)
-
-GET  /admin/employees                   employee directory
+GET  /admin/users                       users page (mutations via JSON API)
+GET  /admin/roles                       roles page (mutations via JSON API)
+GET  /admin/employees                   employee directory (read-only)
 
 Access control
 --------------
 Every route except /admin/login is guarded by `require_admin`, which
 reuses the same RBAC model the rest of the system relies on. An
 "admin" is simply a user whose role name matches ADMIN_ROLE_NAME.
-There is no separate admin table.
-
-All write actions (create/delete/assign) are recorded in the audit log
-through the same policy-engine path they would use from the MCP side,
-so the dashboard's own activity is traceable too.
+There is no separate admin table. The same dependency is reused by
+the admin JSON API for symmetry.
 """
 
 from typing import Optional
@@ -82,15 +76,28 @@ def _current_admin(request: Request, db: Session) -> Optional[User]:
 def require_admin(
     request: Request, db: Session = Depends(get_db)
 ) -> User:
+    """
+    Cookie-based admin guard. Reused by the admin JSON API (admin_api.py)
+    so HTML pages and JSON clients share the exact same auth path.
+    """
     user = _current_admin(request, db)
     if user is None:
         raise HTTPException(status_code=401, detail="admin_login_required")
     return user
 
 
-def _redirect(path: str, notice: Optional[str] = None) -> RedirectResponse:
-    url = path if not notice else f"{path}?notice={notice}"
-    return RedirectResponse(url=url, status_code=303)
+def _tool_backed_permission_names() -> set[str]:
+    """
+    Names of permissions that correspond to a registered @mcp.tool().
+    Used by the dashboard to mark which permissions are auto-synced
+    (and therefore will re-appear on next server start if deleted).
+    Imported by admin_api.py for the same purpose.
+    """
+    try:
+        from app.mcp.server import mcp
+        return set(mcp._tool_manager._tools.keys())
+    except Exception:
+        return set()
 
 
 # --- login / logout ----------------------------------------------------
@@ -211,6 +218,7 @@ def audit_view(
 
 
 # --- users -------------------------------------------------------------
+# Mutations live in app/api/admin_api.py at /api/v1/admin/users.
 
 
 @router.get("/users", response_class=HTMLResponse)
@@ -218,7 +226,6 @@ def users_view(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_admin),
-    notice: Optional[str] = None,
 ):
     users = db.query(User).order_by(User.username.asc()).all()
     roles = db.query(Role).order_by(Role.name.asc()).all()
@@ -230,91 +237,14 @@ def users_view(
             "admin_user": user,
             "users": users,
             "roles": roles,
-            "notice": notice,
             "active_tab": "users",
         },
     )
 
 
-@router.post("/users/create")
-def create_user(
-    new_username: str = Form(...),
-    role_name: str = Form(...),
-    db: Session = Depends(get_db),
-    user: User = Depends(require_admin),
-):
-    new_username = new_username.strip()
-    if not new_username:
-        return _redirect("/admin/users", "invalid_username")
-
-    existing = db.query(User).filter(User.username == new_username).first()
-    if existing:
-        return _redirect("/admin/users", "user_exists")
-
-    role = db.query(Role).filter(Role.name == role_name).first()
-    if not role:
-        return _redirect("/admin/users", "role_not_found")
-
-    db.add(User(username=new_username, role_id=role.id))
-    db.commit()
-    return _redirect("/admin/users", "user_created")
-
-
-@router.post("/users/assign-role")
-def assign_role(
-    target_username: str = Form(...),
-    role_name: str = Form(...),
-    db: Session = Depends(get_db),
-    user: User = Depends(require_admin),
-):
-    target = db.query(User).filter(User.username == target_username).first()
-    if not target:
-        return _redirect("/admin/users", "user_not_found")
-
-    role = db.query(Role).filter(Role.name == role_name).first()
-    if not role:
-        return _redirect("/admin/users", "role_not_found")
-
-    if target.id == user.id and role.name != ADMIN_ROLE_NAME:
-        return _redirect("/admin/users", "cannot_demote_self")
-
-    target.role = role
-    db.commit()
-    return _redirect("/admin/users", "role_updated")
-
-
-@router.post("/users/delete")
-def delete_user(
-    target_username: str = Form(...),
-    db: Session = Depends(get_db),
-    user: User = Depends(require_admin),
-):
-    target = db.query(User).filter(User.username == target_username).first()
-    if not target:
-        return _redirect("/admin/users", "user_not_found")
-
-    if target.id == user.id:
-        return _redirect("/admin/users", "cannot_delete_self")
-
-    db.delete(target)
-    db.commit()
-    return _redirect("/admin/users", "user_deleted")
-
-
 # --- roles & permissions ----------------------------------------------
-
-
-def _tool_backed_permission_names() -> set[str]:
-    """
-    Names of permissions that correspond to a registered @mcp.tool().
-    Used by the dashboard to mark which permissions are auto-synced
-    (and therefore will re-appear on next server start if deleted).
-    """
-    try:
-        from app.mcp.server import mcp
-        return set(mcp._tool_manager._tools.keys())
-    except Exception:
-        return set()
+# Mutations live in app/api/admin_api.py at /api/v1/admin/roles and
+# /api/v1/admin/permissions.
 
 
 @router.get("/roles", response_class=HTMLResponse)
@@ -322,7 +252,6 @@ def roles_view(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_admin),
-    notice: Optional[str] = None,
 ):
     roles = db.query(Role).order_by(Role.name.asc()).all()
     all_permissions = (
@@ -338,127 +267,9 @@ def roles_view(
             "all_permissions": all_permissions,
             "tool_backed_permissions": _tool_backed_permission_names(),
             "active_tab": "roles",
-            "notice": notice,
             "admin_role_name": ADMIN_ROLE_NAME,
         },
     )
-
-
-@router.post("/roles/create")
-def create_role(
-    name: str = Form(...),
-    db: Session = Depends(get_db),
-    user: User = Depends(require_admin),
-):
-    name = name.strip()
-    if not name:
-        return _redirect("/admin/roles", "invalid_name")
-    if db.query(Role).filter(Role.name == name).first():
-        return _redirect("/admin/roles", "role_exists")
-
-    db.add(Role(name=name))
-    db.commit()
-    return _redirect("/admin/roles", "role_created")
-
-
-@router.post("/roles/delete")
-def delete_role(
-    name: str = Form(...),
-    db: Session = Depends(get_db),
-    user: User = Depends(require_admin),
-):
-    role = db.query(Role).filter(Role.name == name).first()
-    if not role:
-        return _redirect("/admin/roles", "role_not_found")
-
-    if role.name == ADMIN_ROLE_NAME:
-        return _redirect("/admin/roles", "cannot_delete_admin_role")
-
-    if role.users:
-        return _redirect("/admin/roles", "role_has_users")
-
-    db.delete(role)
-    db.commit()
-    return _redirect("/admin/roles", "role_deleted")
-
-
-@router.post("/roles/add-permission")
-def add_permission_to_role(
-    role_name: str = Form(...),
-    permission_name: str = Form(...),
-    db: Session = Depends(get_db),
-    user: User = Depends(require_admin),
-):
-    role = db.query(Role).filter(Role.name == role_name).first()
-    if not role:
-        return _redirect("/admin/roles", "role_not_found")
-
-    permission = (
-        db.query(Permission).filter(Permission.name == permission_name).first()
-    )
-    if not permission:
-        return _redirect("/admin/roles", "permission_not_found")
-
-    if permission in role.permissions:
-        return _redirect("/admin/roles", "permission_already_assigned")
-
-    role.permissions.append(permission)
-    db.commit()
-    return _redirect("/admin/roles", "permission_added")
-
-
-@router.post("/roles/remove-permission")
-def remove_permission_from_role(
-    role_name: str = Form(...),
-    permission_name: str = Form(...),
-    db: Session = Depends(get_db),
-    user: User = Depends(require_admin),
-):
-    role = db.query(Role).filter(Role.name == role_name).first()
-    if not role:
-        return _redirect("/admin/roles", "role_not_found")
-
-    permission = (
-        db.query(Permission).filter(Permission.name == permission_name).first()
-    )
-    if not permission:
-        return _redirect("/admin/roles", "permission_not_found")
-
-    if permission not in role.permissions:
-        return _redirect("/admin/roles", "permission_not_on_role")
-
-    role.permissions.remove(permission)
-    db.commit()
-    return _redirect("/admin/roles", "permission_removed")
-
-
-# NOTE: There is intentionally no POST /admin/permissions/create route.
-# Permissions are a property of tools, not something an admin invents.
-# New permissions appear automatically via the tool-sync pass in
-# app/mcp/server.py on startup. Admin can still delete stale ones below;
-# if a deleted permission still corresponds to a registered tool, it
-# will be re-created the next time the MCP server boots.
-
-
-@router.post("/permissions/delete")
-def delete_permission(
-    name: str = Form(...),
-    db: Session = Depends(get_db),
-    user: User = Depends(require_admin),
-):
-    permission = db.query(Permission).filter(Permission.name == name).first()
-    if not permission:
-        return _redirect("/admin/roles", "permission_not_found")
-
-    # Detach from every role first so we never dangle a row in the
-    # association table.
-    for role in list(permission.roles) if hasattr(permission, "roles") else []:
-        if permission in role.permissions:
-            role.permissions.remove(permission)
-
-    db.delete(permission)
-    db.commit()
-    return _redirect("/admin/roles", "permission_deleted")
 
 
 # --- employees ---------------------------------------------------------

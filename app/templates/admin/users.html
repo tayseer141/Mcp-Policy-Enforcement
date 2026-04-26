@@ -2,20 +2,10 @@
 {% block content %}
   <h1>Users</h1>
 
-  {% set NOTICES = {
-    "user_created": ("ok", "User created."),
-    "user_exists": ("err", "A user with that username already exists."),
-    "user_not_found": ("err", "That user was not found."),
-    "role_not_found": ("err", "That role was not found."),
-    "role_updated": ("ok", "Role updated."),
-    "user_deleted": ("ok", "User deleted."),
-    "cannot_delete_self": ("err", "You cannot delete your own admin account."),
-    "cannot_demote_self": ("err", "You cannot demote your own admin account."),
-    "invalid_username": ("err", "Username cannot be empty."),
-  } %}
-  {% if notice and notice in NOTICES %}
-    <div class="notice {% if NOTICES[notice][0] == 'err' %}error{% endif %}">{{ NOTICES[notice][1] }}</div>
-  {% endif %}
+  {# Notices are now rendered client-side by the JSON API client below
+     (notice-area). The old query-param-driven Jinja notice block has
+     been removed because mutations no longer redirect. #}
+  <div id="notice-area"></div>
 
   <table>
     <thead>
@@ -48,8 +38,10 @@
             {% endif %}
           </td>
           <td>
-            <form method="post" action="/admin/users/assign-role" class="inline" style="margin: 0;">
-              <input type="hidden" name="target_username" value="{{ u.username }}">
+            <form class="api-form inline"
+                  data-method="PATCH"
+                  data-url="/api/v1/admin/users/{{ u.username }}/role"
+                  style="margin: 0;">
               <select name="role_name">
                 {% for r in roles %}
                   <option value="{{ r.name }}" {% if u.role and u.role.name == r.name %}selected{% endif %}>{{ r.name }}</option>
@@ -60,9 +52,11 @@
           </td>
           <td class="right">
             {% if u.id != admin_user.id %}
-              <form method="post" action="/admin/users/delete" style="display:inline;"
-                    onsubmit="return confirm('Delete user {{ u.username }}?');">
-                <input type="hidden" name="target_username" value="{{ u.username }}">
+              <form class="api-form"
+                    data-method="DELETE"
+                    data-url="/api/v1/admin/users/{{ u.username }}"
+                    data-confirm="Delete user {{ u.username }}?"
+                    style="display:inline;">
                 <button type="submit" class="btn secondary" style="color: var(--deny); border-color: rgba(239,68,68,0.4);">Delete</button>
               </form>
             {% else %}
@@ -75,10 +69,12 @@
   </table>
 
   <h2>Create user</h2>
-  <form method="post" action="/admin/users/create" class="inline">
+  <form class="api-form inline"
+        data-method="POST"
+        data-url="/api/v1/admin/users">
     <label>
       Username
-      <input type="text" name="new_username" required>
+      <input type="text" name="username" required>
     </label>
     <label>
       Role
@@ -92,6 +88,99 @@
   </form>
 
   <p class="muted" style="margin-top: 16px; font-size: 12px;">
-    All RBAC changes made here take effect on the next MCP request — the policy engine reads the current role/permission state on every call.
+    All RBAC changes made here go through the JSON API at
+    <code>/api/v1/admin/*</code> and take effect on the next MCP request —
+    the policy engine reads the current role/permission state on every call.
   </p>
+
+  {# Generic JSON-API form client. Lives at the bottom of every admin
+     page that has mutations, so the JS is colocated with the markup
+     it drives. #}
+  <script>
+    (function() {
+      const noticeArea = document.getElementById("notice-area");
+
+      function showNotice(kind, message) {
+        if (!noticeArea) return;
+        noticeArea.innerHTML =
+          '<div class="notice ' + (kind === "err" ? "error" : "") + '">'
+          + escapeHtml(message)
+          + '</div>';
+      }
+
+      function escapeHtml(s) {
+        if (s === null || s === undefined) return "";
+        return String(s)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function formToJson(form) {
+        const out = {};
+        new FormData(form).forEach(function(value, key) {
+          out[key] = value;
+        });
+        return out;
+      }
+
+      document.querySelectorAll("form.api-form").forEach(function(form) {
+        form.addEventListener("submit", async function(e) {
+          e.preventDefault();
+          const method = (form.dataset.method || "POST").toUpperCase();
+          const url = form.dataset.url;
+          const confirmMsg = form.dataset.confirm;
+
+          if (confirmMsg && !confirm(confirmMsg)) return;
+
+          const opts = {
+            method: method,
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+          };
+          if (method !== "GET" && method !== "DELETE") {
+            const body = formToJson(form);
+            if (Object.keys(body).length > 0) {
+              opts.body = JSON.stringify(body);
+            }
+          }
+
+          // Disable the submit button while in flight to prevent double-submits.
+          const btn = form.querySelector('button[type="submit"]');
+          let originalLabel = "";
+          if (btn) {
+            originalLabel = btn.textContent;
+            btn.disabled = true;
+          }
+
+          try {
+            const res = await fetch(url, opts);
+            let data = null;
+            try { data = await res.json(); } catch (_) { /* no body */ }
+
+            if (res.ok) {
+              showNotice("ok", (data && data.message) || "Done.");
+              // Reload after a short delay so the user sees the notice.
+              setTimeout(function() { location.reload(); }, 500);
+            } else {
+              const detail = data && data.detail;
+              const msg =
+                (detail && typeof detail === "object" && detail.message)
+                  ? detail.message
+                  : (detail && typeof detail === "string"
+                      ? detail
+                      : "Request failed (HTTP " + res.status + ").");
+              showNotice("err", msg);
+              if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
+            }
+          } catch (err) {
+            showNotice("err", err.message || String(err));
+            if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
+          }
+        });
+      });
+    })();
+  </script>
 {% endblock %}

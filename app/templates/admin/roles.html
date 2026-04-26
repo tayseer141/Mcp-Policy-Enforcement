@@ -5,24 +5,8 @@
     Each role is a bag of permissions. When a tool call comes in, the policy engine checks whether the caller's role has the permission matching the tool name.
   </p>
 
-  {% set NOTICES = {
-    "role_created": ("ok", "Role created."),
-    "role_deleted": ("ok", "Role deleted."),
-    "role_exists": ("err", "A role with that name already exists."),
-    "role_not_found": ("err", "That role was not found."),
-    "role_has_users": ("err", "Cannot delete a role that still has users assigned."),
-    "cannot_delete_admin_role": ("err", "The admin role cannot be deleted."),
-    "permission_deleted": ("ok", "Permission deleted."),
-    "permission_not_found": ("err", "That permission was not found."),
-    "permission_added": ("ok", "Permission attached to role."),
-    "permission_removed": ("ok", "Permission removed from role."),
-    "permission_already_assigned": ("err", "That permission is already on the role."),
-    "permission_not_on_role": ("err", "That permission is not currently on the role."),
-    "invalid_name": ("err", "Name cannot be empty."),
-  } %}
-  {% if notice and notice in NOTICES %}
-    <div class="notice {% if NOTICES[notice][0] == 'err' %}error{% endif %}">{{ NOTICES[notice][1] }}</div>
-  {% endif %}
+  {# Notices are now rendered client-side by the JSON API client below. #}
+  <div id="notice-area"></div>
 
   <h2>Roles</h2>
   <table>
@@ -43,10 +27,11 @@
               {% for p in r.permissions %}
                 <span class="pill stage" style="margin-right: 4px;">
                   <code class="mono" style="color: var(--text);">{{ p.name }}</code>
-                  <form method="post" action="/admin/roles/remove-permission" style="display: inline; margin-left: 4px;"
-                        onsubmit="return confirm('Remove {{ p.name }} from {{ r.name }}?');">
-                    <input type="hidden" name="role_name" value="{{ r.name }}">
-                    <input type="hidden" name="permission_name" value="{{ p.name }}">
+                  <form class="api-form"
+                        data-method="DELETE"
+                        data-url="/api/v1/admin/roles/{{ r.name }}/permissions/{{ p.name }}"
+                        data-confirm="Remove {{ p.name }} from {{ r.name }}?"
+                        style="display: inline; margin-left: 4px;">
                     <button type="submit" title="Remove permission"
                             style="background:transparent; border:0; color: var(--muted); cursor:pointer; padding:0 2px;">×</button>
                   </form>
@@ -56,8 +41,10 @@
               <span class="muted">— none —</span>
             {% endif %}
 
-            <form method="post" action="/admin/roles/add-permission" class="inline" style="margin-top: 8px;">
-              <input type="hidden" name="role_name" value="{{ r.name }}">
+            <form class="api-form inline"
+                  data-method="POST"
+                  data-url="/api/v1/admin/roles/{{ r.name }}/permissions"
+                  style="margin-top: 8px;">
               <select name="permission_name" required>
                 {% for p in all_permissions %}
                   {% if p not in r.permissions %}
@@ -77,9 +64,11 @@
           </td>
           <td class="right">
             {% if r.name != admin_role_name %}
-              <form method="post" action="/admin/roles/delete" style="display:inline;"
-                    onsubmit="return confirm('Delete role {{ r.name }}?');">
-                <input type="hidden" name="name" value="{{ r.name }}">
+              <form class="api-form"
+                    data-method="DELETE"
+                    data-url="/api/v1/admin/roles/{{ r.name }}"
+                    data-confirm="Delete role {{ r.name }}?"
+                    style="display:inline;">
                 <button type="submit" class="btn secondary" style="color: var(--deny); border-color: rgba(239,68,68,0.4);">Delete</button>
               </form>
             {% else %}
@@ -92,7 +81,9 @@
   </table>
 
   <h2>Create role</h2>
-  <form method="post" action="/admin/roles/create" class="inline">
+  <form class="api-form inline"
+        data-method="POST"
+        data-url="/api/v1/admin/roles">
     <label>
       Role name
       <input type="text" name="name" required placeholder="e.g. auditor">
@@ -142,11 +133,11 @@
             {% endif %}
           </td>
           <td class="right">
-            <form method="post" action="/admin/permissions/delete" style="display:inline;"
-                  onsubmit="return confirm(
-                    '{% if p.name in tool_backed_permissions %}This permission is backed by a registered tool and will be re-created on next server start. Delete anyway?{% else %}Delete permission {{ p.name }}? It will be detached from every role.{% endif %}'
-                  );">
-              <input type="hidden" name="name" value="{{ p.name }}">
+            <form class="api-form"
+                  data-method="DELETE"
+                  data-url="/api/v1/admin/permissions/{{ p.name }}"
+                  data-confirm="{% if p.name in tool_backed_permissions %}This permission is backed by a registered tool and will be re-created on next server start. Delete anyway?{% else %}Delete permission {{ p.name }}? It will be detached from every role.{% endif %}"
+                  style="display:inline;">
               <button type="submit" class="btn secondary" style="color: var(--deny); border-color: rgba(239,68,68,0.4);">Delete</button>
             </form>
           </td>
@@ -158,4 +149,91 @@
   <p class="muted" style="margin-top: 16px; font-size: 12px;">
     Changes to roles and role↔permission assignments take effect on the next MCP request — the policy engine re-reads RBAC state on every call.
   </p>
+
+  {# Generic JSON-API form client (same shape as users.html). #}
+  <script>
+    (function() {
+      const noticeArea = document.getElementById("notice-area");
+
+      function showNotice(kind, message) {
+        if (!noticeArea) return;
+        noticeArea.innerHTML =
+          '<div class="notice ' + (kind === "err" ? "error" : "") + '">'
+          + escapeHtml(message)
+          + '</div>';
+      }
+
+      function escapeHtml(s) {
+        if (s === null || s === undefined) return "";
+        return String(s)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function formToJson(form) {
+        const out = {};
+        new FormData(form).forEach(function(value, key) {
+          out[key] = value;
+        });
+        return out;
+      }
+
+      document.querySelectorAll("form.api-form").forEach(function(form) {
+        form.addEventListener("submit", async function(e) {
+          e.preventDefault();
+          const method = (form.dataset.method || "POST").toUpperCase();
+          const url = form.dataset.url;
+          const confirmMsg = form.dataset.confirm;
+
+          if (confirmMsg && !confirm(confirmMsg)) return;
+
+          const opts = {
+            method: method,
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+          };
+          if (method !== "GET" && method !== "DELETE") {
+            const body = formToJson(form);
+            if (Object.keys(body).length > 0) {
+              opts.body = JSON.stringify(body);
+            }
+          }
+
+          const btn = form.querySelector('button[type="submit"]');
+          let originalLabel = "";
+          if (btn) {
+            originalLabel = btn.textContent;
+            btn.disabled = true;
+          }
+
+          try {
+            const res = await fetch(url, opts);
+            let data = null;
+            try { data = await res.json(); } catch (_) { /* no body */ }
+
+            if (res.ok) {
+              showNotice("ok", (data && data.message) || "Done.");
+              setTimeout(function() { location.reload(); }, 500);
+            } else {
+              const detail = data && data.detail;
+              const msg =
+                (detail && typeof detail === "object" && detail.message)
+                  ? detail.message
+                  : (detail && typeof detail === "string"
+                      ? detail
+                      : "Request failed (HTTP " + res.status + ").");
+              showNotice("err", msg);
+              if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
+            }
+          } catch (err) {
+            showNotice("err", err.message || String(err));
+            if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
+          }
+        });
+      });
+    })();
+  </script>
 {% endblock %}
