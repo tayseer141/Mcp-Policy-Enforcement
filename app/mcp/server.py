@@ -14,6 +14,7 @@ from app.services.local_tool_executor import execute_tool_locally
 import app.models.rbac_models  # noqa: F401
 import app.models.employee_model  # noqa: F401
 import app.models.audit_model  # noqa: F401  (admin dashboard audit trail)
+import app.models.policy_model  # noqa: F401  (admin-managed business policies)
 
 
 logging.basicConfig(
@@ -100,7 +101,7 @@ def update_salary(
     new_salary: int,
     raw_prompt: str = "",
 ) -> dict:
-    """Update an employee's salary. Enforces RBAC, intent alignment, and the 20% max raise policy."""
+    """Update an employee's salary. Enforces RBAC, intent alignment, and the admin-configurable max salary-raise policy."""
     db = SessionLocal()
     try:
         return execute_tool_locally(
@@ -149,6 +150,33 @@ def delete_employee(
             tool_name="delete_employee",
             required_permission="delete_employee",
             arguments=arguments,
+            raw_prompt=raw_prompt,
+        )
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def add_employee(
+    username: str,
+    name: str,
+    department: str,
+    salary: int,
+    raw_prompt: str = "",
+) -> dict:
+    """Create a new employee record. Enforces RBAC, intent alignment, and the admin-configurable max starting-salary policy."""
+    db = SessionLocal()
+    try:
+        return execute_tool_locally(
+            db=db,
+            username=username,
+            tool_name="add_employee",
+            required_permission="add_employee",
+            arguments={
+                "name": name,
+                "department": department,
+                "salary": salary,
+            },
             raw_prompt=raw_prompt,
         )
     finally:

@@ -5,8 +5,10 @@ from app.policy.models import AuthorizationDecision
 from app.policy.rules import (
     evaluate_delete_limit_policy,
     evaluate_salary_raise_policy,
+    evaluate_starting_salary_policy,
 )
 from app.policy.intent import check_intent_alignment
+from app.policy.store import resolve_active_policy
 from app.models.employee_model import Employee
 from app.models.rbac_models import User
 
@@ -85,18 +87,31 @@ def evaluate_policies(
     """
     Stage 3: Business-logic Policy Evaluation.
     Contextual checks based on tool arguments.
+
+    Thresholds are no longer hardcoded — they are read from the policies
+    table via app.policy.store on every request, so admin changes (made
+    through the dashboard / NL authoring flow) take effect immediately.
+    A policy that an admin has disabled is simply not enforced here.
     """
     if tool_name == "delete_employee":
+        active = resolve_active_policy(db, "max_delete_count", "delete_employee")
+        if not active.enforce:
+            return AuthorizationDecision(
+                allowed=True,
+                stage="policy",
+                reason="No active delete-limit policy; request allowed.",
+            )
+
         allowed, reason, matched_policy = evaluate_delete_limit_policy(
             tool_name=tool_name,
             arguments=arguments,
-            max_delete_count=1,
+            max_delete_count=int(active.threshold),
         )
         return AuthorizationDecision(
             allowed=allowed,
             stage="policy",
             reason=reason,
-            matched_policy=matched_policy,
+            matched_policy=active.name or matched_policy,
         )
 
     if tool_name == "update_salary":
@@ -120,17 +135,57 @@ def evaluate_policies(
                 matched_policy="max_salary_raise_percent",
             )
 
+        active = resolve_active_policy(
+            db, "max_salary_raise_percent", "update_salary"
+        )
+        if not active.enforce:
+            return AuthorizationDecision(
+                allowed=True,
+                stage="policy",
+                reason="No active salary-raise policy; request allowed.",
+            )
+
         allowed, reason, matched_policy = evaluate_salary_raise_policy(
             current_salary=float(employee.salary),
             requested_salary=float(requested_salary),
-            max_raise_percent=20.0,
+            max_raise_percent=float(active.threshold),
         )
 
         return AuthorizationDecision(
             allowed=allowed,
             stage="policy",
             reason=reason,
-            matched_policy=matched_policy,
+            matched_policy=active.name or matched_policy,
+        )
+
+    if tool_name == "add_employee":
+        requested_salary = arguments.get("salary")
+
+        if requested_salary is None:
+            return AuthorizationDecision(
+                allowed=False,
+                stage="validation",
+                reason="Add employee denied because the starting salary is missing.",
+                matched_policy="max_starting_salary",
+            )
+
+        active = resolve_active_policy(db, "max_starting_salary", "add_employee")
+        if not active.enforce:
+            return AuthorizationDecision(
+                allowed=True,
+                stage="policy",
+                reason="No active starting-salary policy; request allowed.",
+            )
+
+        allowed, reason, matched_policy = evaluate_starting_salary_policy(
+            requested_salary=float(requested_salary),
+            max_starting_salary=float(active.threshold),
+        )
+        return AuthorizationDecision(
+            allowed=allowed,
+            stage="policy",
+            reason=reason,
+            matched_policy=active.name or matched_policy,
         )
 
     return AuthorizationDecision(

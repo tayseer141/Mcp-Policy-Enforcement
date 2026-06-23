@@ -15,6 +15,7 @@ from app.api.demo import router as demo_router
 
 # Data plane / control plane (JSON API)
 from app.api.admin_api import router as admin_api_router
+from app.api.policy_api import router as policy_api_router
 from app.api.execute import router as execute_router
 
 # Other surfaces
@@ -25,6 +26,7 @@ from app.api.mcp import router as mcp_router
 # before create_all runs.
 import app.models.employee_model  # noqa: F401
 import app.models.rbac_models  # noqa: F401
+import app.models.policy_model  # noqa: F401
 
 
 @asynccontextmanager
@@ -64,6 +66,7 @@ app.include_router(admin_router)    # /admin/login, /admin, /admin/users, ...
 # --- JSON API ---
 app.include_router(execute_router)      # POST /api/v1/execute
 app.include_router(admin_api_router)    # /api/v1/admin/users, /roles, /permissions
+app.include_router(policy_api_router)   # /api/v1/admin/policies, /policy-types
 
 # --- Other surfaces ---
 app.include_router(employees_router)

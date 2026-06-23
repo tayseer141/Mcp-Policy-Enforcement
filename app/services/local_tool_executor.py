@@ -132,6 +132,29 @@ def execute_tool_locally(
             },
         }
 
+    if tool_name == "add_employee":
+        name = arguments.get("name")
+        department = arguments.get("department")
+        salary = arguments.get("salary")
+
+        if not name or not department or salary is None:
+            raise ValueError("name, department and salary are required")
+
+        employee = Employee(name=name, department=department, salary=salary)
+        db.add(employee)
+        db.commit()
+        db.refresh(employee)
+
+        return {
+            "message": "Employee added successfully",
+            "employee": {
+                "id": employee.id,
+                "name": employee.name,
+                "department": employee.department,
+                "salary": employee.salary,
+            },
+        }
+
     if tool_name == "delete_employee":
         employee_ids = arguments.get("employee_ids")
         employee_id = arguments.get("employee_id")

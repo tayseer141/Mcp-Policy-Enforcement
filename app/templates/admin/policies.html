@@ -1,0 +1,262 @@
+{% extends "admin/base.html" %}
+{% block content %}
+  <h1>Policies</h1>
+
+  <div id="notice-area"></div>
+
+  <p class="muted" style="margin-top:-8px; margin-bottom:20px;">
+    Business-logic policies are read by the engine on every request, so
+    changes here take effect immediately. Disabling a policy turns the
+    check off without deleting it.
+  </p>
+
+  {# ---------------- Natural-language authoring ---------------- #}
+  <h2>Author a policy in natural language</h2>
+  <div class="card" style="margin-bottom:8px;">
+    <label class="muted" for="nl-text" style="font-size:12px;">
+      Describe the rule in plain language. It will be interpreted into a
+      structured policy that you review before anything is saved.
+    </label>
+    <textarea id="nl-text" rows="2"
+      placeholder="e.g. Don't let anyone delete more than 2 employees at once"
+      style="width:100%; margin-top:8px; background:var(--panel-2); color:var(--text);
+             border:1px solid var(--border); border-radius:6px; padding:10px;
+             font-size:13px; font-family:inherit; resize:vertical;"></textarea>
+    <div style="margin-top:10px;">
+      <button id="nl-interpret" class="btn" type="button">Interpret</button>
+      <span id="nl-spinner" class="muted" style="display:none; margin-left:10px;">interpreting…</span>
+    </div>
+
+    {# Draft review / confirm panel — hidden until we have a draft. #}
+    <div id="nl-draft" style="display:none; margin-top:16px; padding-top:16px;
+         border-top:1px solid var(--border);">
+      <div id="nl-draft-explanation" style="margin-bottom:12px;"></div>
+      <table id="nl-draft-table" style="display:none; margin-bottom:14px;">
+        <tbody>
+          <tr><th style="width:160px;">Policy type</th><td id="nl-d-type"></td></tr>
+          <tr><th>Guards tool</th><td id="nl-d-tool"></td></tr>
+          <tr><th>Limit</th><td id="nl-d-threshold"></td></tr>
+        </tbody>
+      </table>
+      <div>
+        <button id="nl-confirm" class="btn" type="button" style="display:none;">Confirm &amp; save</button>
+        <button id="nl-discard" class="btn secondary" type="button">Discard</button>
+      </div>
+    </div>
+  </div>
+
+  {# ---------------- Active policies ---------------- #}
+  <h2>Active policies</h2>
+  {% if policies %}
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Guards tool</th>
+        <th>Origin</th>
+        <th>Limit &amp; status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in policies %}
+        <tr>
+          <td>
+            <strong>{{ p.name }}</strong>
+            <div class="muted" style="font-size:12px;">{{ p.description }}</div>
+          </td>
+          <td><code class="mono">{{ p.tool_name }}</code></td>
+          <td>
+            <span class="pill stage">{{ p.origin }}</span>
+            {% if p.created_by %}<div class="muted" style="font-size:11px;">by {{ p.created_by }}</div>{% endif %}
+          </td>
+          <td>
+            <form class="api-form inline"
+                  data-method="PATCH"
+                  data-url="/api/v1/admin/policies/{{ p.id }}"
+                  style="margin:0; align-items:center;">
+              <input type="number" name="threshold" value="{{ p.threshold|round(2) }}"
+                     step="any" min="0" style="min-width:90px;">
+              <select name="enabled">
+                <option value="true"  {% if p.enabled %}selected{% endif %}>enabled</option>
+                <option value="false" {% if not p.enabled %}selected{% endif %}>disabled</option>
+              </select>
+              <button type="submit" class="btn secondary">Save</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="muted">No policies defined yet. Author one above, or add one manually below.</p>
+  {% endif %}
+
+  <script>
+    (function() {
+      const noticeArea = document.getElementById("notice-area");
+
+      function showNotice(kind, message) {
+        if (!noticeArea) return;
+        noticeArea.innerHTML =
+          '<div class="notice ' + (kind === "err" ? "error" : "") + '">'
+          + escapeHtml(message) + '</div>';
+        noticeArea.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+
+      function escapeHtml(s) {
+        if (s === null || s === undefined) return "";
+        return String(s)
+          .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+      }
+
+      function formToJson(form) {
+        const out = {};
+        new FormData(form).forEach(function(value, key) { out[key] = value; });
+        return out;
+      }
+
+      function errMessage(data, status) {
+        const detail = data && data.detail;
+        if (detail && typeof detail === "object" && detail.message) return detail.message;
+        if (detail && typeof detail === "string") return detail;
+        return "Request failed (HTTP " + status + ").";
+      }
+
+      // ---- Generic JSON-API form client (table rows + manual form) ----
+      document.querySelectorAll("form.api-form").forEach(function(form) {
+        form.addEventListener("submit", async function(e) {
+          e.preventDefault();
+          const method = (form.dataset.method || "POST").toUpperCase();
+          const url = form.dataset.url;
+          const confirmMsg = form.dataset.confirm;
+          if (confirmMsg && !confirm(confirmMsg)) return;
+
+          const opts = {
+            method: method,
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+          };
+          if (method !== "GET" && method !== "DELETE") {
+            const body = formToJson(form);
+            if (Object.keys(body).length > 0) opts.body = JSON.stringify(body);
+          }
+
+          const btn = form.querySelector('button[type="submit"]');
+          if (btn) btn.disabled = true;
+
+          try {
+            const res = await fetch(url, opts);
+            let data = null;
+            try { data = await res.json(); } catch (_) {}
+            if (res.ok) {
+              showNotice("ok", (data && data.message) || "Done.");
+              setTimeout(function() { location.reload(); }, 500);
+            } else {
+              showNotice("err", errMessage(data, res.status));
+              if (btn) btn.disabled = false;
+            }
+          } catch (err) {
+            showNotice("err", err.message || String(err));
+            if (btn) btn.disabled = false;
+          }
+        });
+      });
+
+      // ---- Natural-language: interpret -> review -> confirm ----
+      let currentDraft = null;
+      const nlText = document.getElementById("nl-text");
+      const nlInterpret = document.getElementById("nl-interpret");
+      const nlSpinner = document.getElementById("nl-spinner");
+      const nlPanel = document.getElementById("nl-draft");
+      const nlExplain = document.getElementById("nl-draft-explanation");
+      const nlTable = document.getElementById("nl-draft-table");
+      const nlConfirm = document.getElementById("nl-confirm");
+      const nlDiscard = document.getElementById("nl-discard");
+
+      function resetDraft() {
+        currentDraft = null;
+        nlPanel.style.display = "none";
+        nlTable.style.display = "none";
+        nlConfirm.style.display = "none";
+      }
+
+      nlInterpret.addEventListener("click", async function() {
+        const text = (nlText.value || "").trim();
+        if (!text) { showNotice("err", "Type a policy description first."); return; }
+
+        nlInterpret.disabled = true;
+        nlSpinner.style.display = "inline";
+        resetDraft();
+
+        try {
+          const res = await fetch("/api/v1/admin/policies/draft", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ text: text }),
+          });
+          const draft = await res.json();
+          if (!res.ok) { showNotice("err", errMessage(draft, res.status)); return; }
+
+          nlPanel.style.display = "block";
+          if (draft.valid) {
+            currentDraft = draft;
+            nlExplain.innerHTML =
+              '<div class="notice">' + escapeHtml(draft.explanation) + '</div>';
+            document.getElementById("nl-d-type").textContent = draft.policy_type;
+            document.getElementById("nl-d-tool").innerHTML =
+              '<code class="mono">' + escapeHtml(draft.tool_name) + '</code>';
+            document.getElementById("nl-d-threshold").textContent = draft.threshold;
+            nlTable.style.display = "table";
+            nlConfirm.style.display = "inline-block";
+          } else {
+            nlExplain.innerHTML =
+              '<div class="notice error">' + escapeHtml(draft.explanation) + '</div>';
+          }
+        } catch (err) {
+          showNotice("err", err.message || String(err));
+        } finally {
+          nlInterpret.disabled = false;
+          nlSpinner.style.display = "none";
+        }
+      });
+
+      nlDiscard.addEventListener("click", function() {
+        resetDraft();
+        nlText.value = "";
+      });
+
+      nlConfirm.addEventListener("click", async function() {
+        if (!currentDraft) return;
+        nlConfirm.disabled = true;
+        try {
+          const res = await fetch("/api/v1/admin/policies", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({
+              policy_type: currentDraft.policy_type,
+              threshold: currentDraft.threshold,
+              name: currentDraft.name,
+              description: currentDraft.description,
+              origin: "nl",
+            }),
+          });
+          let data = null;
+          try { data = await res.json(); } catch (_) {}
+          if (res.ok) {
+            showNotice("ok", (data && data.message) || "Policy created.");
+            setTimeout(function() { location.reload(); }, 600);
+          } else {
+            showNotice("err", errMessage(data, res.status));
+            nlConfirm.disabled = false;
+          }
+        } catch (err) {
+          showNotice("err", err.message || String(err));
+          nlConfirm.disabled = false;
+        }
+      });
+    })();
+  </script>
+{% endblock %}

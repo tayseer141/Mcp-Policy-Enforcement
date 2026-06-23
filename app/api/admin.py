@@ -292,3 +292,48 @@ def employees_view(
             "active_tab": "employees",
         },
     )
+
+
+# --- policies ----------------------------------------------------------
+# Mutations live in app/api/policy_api.py at /api/v1/admin/policies. The
+# natural-language authoring box also calls that API (POST .../draft then
+# POST .../policies on confirm).
+
+
+@router.get("/policies", response_class=HTMLResponse)
+def policies_view(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    from app.models.policy_model import Policy
+    from app.policy.catalog import POLICY_TYPES
+
+    policies = (
+        db.query(Policy)
+        .order_by(Policy.tool_name.asc(), Policy.name.asc())
+        .all()
+    )
+    policy_types = [
+        {
+            "policy_type": ptype,
+            "tool_name": spec["tool_name"],
+            "label": spec["label"],
+            "unit": spec["unit"],
+            "value_kind": spec["value_kind"],
+            "default": spec["default"],
+            "help": spec["help"],
+        }
+        for ptype, spec in POLICY_TYPES.items()
+    ]
+    return templates.TemplateResponse(
+        "admin/policies.html",
+        {
+            "request": request,
+            "title": "Policies",
+            "admin_user": user,
+            "policies": policies,
+            "policy_types": policy_types,
+            "active_tab": "policies",
+        },
+    )

@@ -47,7 +47,7 @@ def update_salary(employee_id: int, username: str, new_salary: int, db: Session 
     user = get_user_or_404(db, username)
     args = {"employee_id": employee_id, "new_salary": new_salary}
     
-    # 🛡️ THE SECURITY HEART: This calls the 20% raise check
+    # 🛡️ THE SECURITY HEART: runs the engine's RBAC + intent + admin-configured salary-raise policy
     decision = authorize_tool_request(
         db=db,
         user=user,

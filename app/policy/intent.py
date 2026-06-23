@@ -38,9 +38,10 @@ TOOL_INTENT_MAP: dict[str, set[str]] = {
     "get_employee_by_id": {"read"},
     "update_salary":      {"update"},
     "delete_employee":    {"delete"},
+    "add_employee":       {"create"},
 }
 
-ALLOWED_INTENT_TAGS = {"read", "update", "delete", "admin", "unknown"}
+ALLOWED_INTENT_TAGS = {"read", "create", "update", "delete", "admin", "unknown"}
 
 
 _client: OpenAI | None = None
@@ -55,9 +56,10 @@ def _openai_client() -> OpenAI:
 
 _CLASSIFIER_SYSTEM_PROMPT = (
     "You classify a short user request into one or more INTENT TAGS. "
-    "Allowed tags: read, update, delete, admin, unknown. "
+    "Allowed tags: read, create, update, delete, admin, unknown. "
     "Rules:\n"
     "- 'read' = retrieve/show/list/find information, no mutation.\n"
+    "- 'create' = add/insert a NEW record (e.g. add/hire a new employee).\n"
     "- 'update' = modify an existing record's field (salary, etc.).\n"
     "- 'delete' = remove one or more records.\n"
     "- 'admin' = manage roles, users, or permissions.\n"
