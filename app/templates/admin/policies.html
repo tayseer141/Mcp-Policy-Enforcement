@@ -70,12 +70,14 @@
             {% if p.created_by %}<div class="muted" style="font-size:11px;">by {{ p.created_by }}</div>{% endif %}
           </td>
           <td>
+            <div class="muted" style="margin-bottom:6px; font-size:12px;">
+              Limit <strong style="color:var(--text);">{{ p.threshold|round(2) }}</strong>
+              <span style="font-size:11px;">· change via the natural-language box above</span>
+            </div>
             <form class="api-form inline"
                   data-method="PATCH"
                   data-url="/api/v1/admin/policies/{{ p.id }}"
                   style="margin:0; align-items:center;">
-              <input type="number" name="threshold" value="{{ p.threshold|round(2) }}"
-                     step="any" min="0" style="min-width:90px;">
               <select name="enabled">
                 <option value="true"  {% if p.enabled %}selected{% endif %}>enabled</option>
                 <option value="false" {% if not p.enabled %}selected{% endif %}>disabled</option>
