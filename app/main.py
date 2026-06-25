@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.db.base import Base
@@ -11,7 +12,7 @@ from app.db.session import SessionLocal, engine
 # --- Routers --------------------------------------------------------
 # View layer (HTML pages)
 from app.api.admin import router as admin_router
-from app.api.demo import router as demo_router
+from app.api.console import router as console_router
 
 # Data plane / control plane (JSON API)
 from app.api.admin_api import router as admin_api_router
@@ -59,8 +60,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# --- Static assets (console CSS/JS module) ---
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
 # --- View layer (HTML) ---
-app.include_router(demo_router)     # GET /demo
+app.include_router(console_router)  # GET /console
 app.include_router(admin_router)    # /admin/login, /admin, /admin/users, ...
 
 # --- JSON API ---

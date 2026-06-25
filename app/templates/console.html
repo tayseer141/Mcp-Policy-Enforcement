@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title }} — MCP Policy Enforcement</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='console.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="dot"></span>
+      MCP Policy Enforcement
+      <small>secure console</small>
+    </div>
+    <div class="session">
+      <a href="/admin">↗ admin dashboard</a>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="hero">
+      <h1>Secure Console</h1>
+      <p class="lede">
+        Send a natural-language request and watch it travel the policy
+        pipeline live — tool selection, RBAC, intent alignment, policy
+        and execution — gate by gate, in real time.
+      </p>
+      <p class="api-hint">Streams over <code>POST /api/v1/execute/stream</code></p>
+    </div>
+
+    <div class="card">
+      <form id="execute-form">
+        <div class="form-row">
+          <label class="input-label" for="username">User</label>
+          <select name="username" id="username" required>
+            {% for u in users %}
+              <option value="{{ u.username }}">
+                {{ u.username }}{% if u.role %} — {{ u.role }}{% endif %}
+              </option>
+            {% endfor %}
+          </select>
+          <div class="permission-preview" id="permission-preview"></div>
+        </div>
+
+        <div class="form-row">
+          <label class="input-label" for="prompt">Natural-language request</label>
+          <span class="field-label">Try one</span>
+          <div class="sample-prompts" id="sample-prompts">
+            <button type="button" class="prompt-chip" data-prompt="Show all employees">Show all employees</button>
+            <button type="button" class="prompt-chip" data-prompt="Get the employee with ID 1">Get employee #1</button>
+            <button type="button" class="prompt-chip danger" data-prompt="Update the salary of employee 2 to 90000">Update a salary</button>
+            <button type="button" class="prompt-chip danger" data-prompt="Delete employee 3">Delete an employee</button>
+          </div>
+          <textarea name="prompt" id="prompt" placeholder="e.g. Show all employees" required></textarea>
+        </div>
+
+        <button type="submit" class="btn" id="submit-btn">Run secure request</button>
+      </form>
+    </div>
+
+    <div id="result-container"></div>
+  </main>
+
+  {# Server-rendered user data, including the permissions of each user's
+     role. The JS reads this to render the permission-preview chips on
+     dropdown change. tojson handles JSON encoding + HTML escaping. #}
+  <script id="users-data" type="application/json">{{ users|tojson|safe }}</script>
+
+  <script src="{{ url_for('static', path='console.js') }}"></script>
+</body>
+</html>

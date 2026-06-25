@@ -166,7 +166,7 @@ def select_tool_from_prompt(prompt: str):
 # Natural-language response layer (functional req #4)
 # ---------------------------------------------------------------------
 # After a tool call succeeds, the raw tool output is almost always JSON.
-# For a demo / for end users, a plain-language summary of that JSON is
+# For the console / for end users, a plain-language summary of that JSON is
 # far more readable. This function asks the LLM to restate the result
 # in the same language the user wrote the prompt in.
 #

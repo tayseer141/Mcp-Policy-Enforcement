@@ -9,7 +9,7 @@ from app.policy.engine import authorize_tool_request, RAW_PROMPT_ARG_KEY
 
 # Sentinel key used to mark a result as a policy/RBAC/intent denial.
 # The MCP client watches for this and re-raises PermissionError on the web
-# side so the demo UI can cleanly distinguish "DENY" from "ERROR".
+# side so the console UI can cleanly distinguish "DENY" from "ERROR".
 POLICY_DENIED_KEY = "__policy_denied__"
 
 
