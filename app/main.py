@@ -25,7 +25,7 @@ from app.api.mcp import router as mcp_router
 
 # Side-effect imports so SQLAlchemy sees every model on Base.metadata
 # before create_all runs.
-import app.models.employee_model  # noqa: F401
+import app.models.customer_model  # noqa: F401
 import app.models.rbac_models  # noqa: F401
 import app.models.policy_model  # noqa: F401
 

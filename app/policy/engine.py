@@ -9,7 +9,7 @@ from app.policy.rules import (
 )
 from app.policy.intent import check_intent_alignment
 from app.policy.store import resolve_active_policy
-from app.models.employee_model import Employee
+from app.models.customer_model import Customer
 from app.models.rbac_models import User
 
 
@@ -93,8 +93,8 @@ def evaluate_policies(
     through the dashboard / NL authoring flow) take effect immediately.
     A policy that an admin has disabled is simply not enforced here.
     """
-    if tool_name == "delete_employee":
-        active = resolve_active_policy(db, "max_delete_count", "delete_employee")
+    if tool_name == "delete_customer":
+        active = resolve_active_policy(db, "max_delete_count", "delete_customer")
         if not active.enforce:
             return AuthorizationDecision(
                 allowed=True,
@@ -114,40 +114,40 @@ def evaluate_policies(
             matched_policy=active.name or matched_policy,
         )
 
-    if tool_name == "update_salary":
-        employee_id = arguments.get("employee_id")
-        requested_salary = arguments.get("new_salary")
+    if tool_name == "update_credit_limit":
+        customer_id = arguments.get("customer_id")
+        requested_credit_limit = arguments.get("new_credit_limit")
 
-        if employee_id is None or requested_salary is None:
+        if customer_id is None or requested_credit_limit is None:
             return AuthorizationDecision(
                 allowed=False,
                 stage="validation",
-                reason="Salary update denied because employee_id or new_salary is missing.",
-                matched_policy="max_salary_raise_percent",
+                reason="Credit limit update denied because customer_id or new_credit_limit is missing.",
+                matched_policy="max_credit_limit_raise_percent",
             )
 
-        employee = db.query(Employee).filter(Employee.id == employee_id).first()
-        if not employee:
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        if not customer:
             return AuthorizationDecision(
                 allowed=False,
                 stage="validation",
-                reason="Salary update denied because the target employee was not found.",
-                matched_policy="max_salary_raise_percent",
+                reason="Credit limit update denied because the target customer was not found.",
+                matched_policy="max_credit_limit_raise_percent",
             )
 
         active = resolve_active_policy(
-            db, "max_salary_raise_percent", "update_salary"
+            db, "max_credit_limit_raise_percent", "update_credit_limit"
         )
         if not active.enforce:
             return AuthorizationDecision(
                 allowed=True,
                 stage="policy",
-                reason="No active salary-raise policy; request allowed.",
+                reason="No active credit-limit-raise policy; request allowed.",
             )
 
         allowed, reason, matched_policy = evaluate_salary_raise_policy(
-            current_salary=float(employee.salary),
-            requested_salary=float(requested_salary),
+            current_salary=float(customer.credit_limit),
+            requested_salary=float(requested_credit_limit),
             max_raise_percent=float(active.threshold),
         )
 
@@ -158,28 +158,28 @@ def evaluate_policies(
             matched_policy=active.name or matched_policy,
         )
 
-    if tool_name == "add_employee":
-        requested_salary = arguments.get("salary")
+    if tool_name == "add_customer":
+        requested_credit_limit = arguments.get("credit_limit")
 
-        if requested_salary is None:
+        if requested_credit_limit is None:
             return AuthorizationDecision(
                 allowed=False,
                 stage="validation",
-                reason="Add employee denied because the starting salary is missing.",
-                matched_policy="max_starting_salary",
+                reason="Add customer denied because the starting credit limit is missing.",
+                matched_policy="max_starting_credit_limit",
             )
 
-        active = resolve_active_policy(db, "max_starting_salary", "add_employee")
+        active = resolve_active_policy(db, "max_starting_credit_limit", "add_customer")
         if not active.enforce:
             return AuthorizationDecision(
                 allowed=True,
                 stage="policy",
-                reason="No active starting-salary policy; request allowed.",
+                reason="No active starting-credit-limit policy; request allowed.",
             )
 
         allowed, reason, matched_policy = evaluate_starting_salary_policy(
-            requested_salary=float(requested_salary),
-            max_starting_salary=float(active.threshold),
+            requested_salary=float(requested_credit_limit),
+            max_starting_credit_limit=float(active.threshold),
         )
         return AuthorizationDecision(
             allowed=allowed,

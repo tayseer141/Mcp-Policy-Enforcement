@@ -1,8 +1,8 @@
 TOOLS = [
     {
         "type": "function",
-        "name": "get_employees",
-        "description": "Get the full list of employees.",
+        "name": "get_customers",
+        "description": "Get the full list of customers.",
         "parameters": {
             "type": "object",
             "properties": {},
@@ -12,53 +12,53 @@ TOOLS = [
     },
     {
         "type": "function",
-        "name": "get_employee_by_id",
-        "description": "Get one employee by employee ID.",
+        "name": "get_customer_by_id",
+        "description": "Get one customer by customer ID.",
         "parameters": {
             "type": "object",
             "properties": {
-                "employee_id": {
+                "customer_id": {
                     "type": "integer",
-                    "description": "The employee ID"
+                    "description": "The customer ID"
                 }
             },
-            "required": ["employee_id"],
+            "required": ["customer_id"],
             "additionalProperties": False
         }
     },
     {
         "type": "function",
-        "name": "update_salary",
-        "description": "Update the salary of an employee.",
+        "name": "update_credit_limit",
+        "description": "Update the credit limit of a customer.",
         "parameters": {
             "type": "object",
             "properties": {
-                "employee_id": {
+                "customer_id": {
                     "type": "integer",
-                    "description": "The employee ID"
+                    "description": "The customer ID"
                 },
-                "new_salary": {
+                "new_credit_limit": {
                     "type": "integer",
-                    "description": "The new salary"
+                    "description": "The new credit limit"
                 }
             },
-            "required": ["employee_id", "new_salary"],
+            "required": ["customer_id", "new_credit_limit"],
             "additionalProperties": False
         }
     },
     {
         "type": "function",
-        "name": "delete_employee",
-        "description": "Delete an employee by employee ID.",
+        "name": "delete_customer",
+        "description": "Delete a customer by customer ID.",
         "parameters": {
             "type": "object",
             "properties": {
-                "employee_id": {
+                "customer_id": {
                     "type": "integer",
-                    "description": "The employee ID"
+                    "description": "The customer ID"
                 }
             },
-            "required": ["employee_id"],
+            "required": ["customer_id"],
             "additionalProperties": False
         }
     }

@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from app.models.rbac_models import Role, User, Permission, RolePermission
-from app.models.employee_model import Employee
+from app.models.customer_model import Customer
 from app.models.policy_model import Policy
 from app.policy.catalog import POLICY_TYPES
 
@@ -40,21 +40,21 @@ def seed_data(db: Session):
 
     admin_role = Role(name="admin")
     manager_role = Role(name="Manager")
-    guest_role = Role(name="Guest")
+    employee_role = Role(name="Employee")
 
-    db.add_all([admin_role, manager_role, guest_role])
+    db.add_all([admin_role, manager_role, employee_role])
     db.commit()
 
     db.refresh(admin_role)
     db.refresh(manager_role)
-    db.refresh(guest_role)
+    db.refresh(employee_role)
 
     permissions = [
-        Permission(name="get_employees"),
-        Permission(name="get_employee_by_id"),
-        Permission(name="update_salary"),
-        Permission(name="delete_employee"),
-        Permission(name="add_employee"),
+        Permission(name="get_customers"),
+        Permission(name="get_customer_by_id"),
+        Permission(name="update_credit_limit"),
+        Permission(name="delete_customer"),
+        Permission(name="add_customer"),
     ]
     db.add_all(permissions)
     db.commit()
@@ -74,23 +74,24 @@ def seed_data(db: Session):
         RolePermission(role_id=manager_role.id, permission_id=permissions[2].id),
         RolePermission(role_id=manager_role.id, permission_id=permissions[4].id),
 
-        RolePermission(role_id=guest_role.id, permission_id=permissions[0].id),
-        RolePermission(role_id=guest_role.id, permission_id=permissions[1].id),
+        # The Employee role is read-only over customers (replaces the old Guest role).
+        RolePermission(role_id=employee_role.id, permission_id=permissions[0].id),
+        RolePermission(role_id=employee_role.id, permission_id=permissions[1].id),
     ]
     db.add_all(role_permissions)
 
     users = [
         User(username="admin_user", role_id=admin_role.id),
         User(username="manager_user", role_id=manager_role.id),
-        User(username="guest_user", role_id=guest_role.id),
+        User(username="employee", role_id=employee_role.id),
     ]
     db.add_all(users)
 
-    employees = [
-        Employee(name="Ali Hasan", department="IT", salary=7000),
-        Employee(name="Sara Khalil", department="HR", salary=6500),
-        Employee(name="Omar Nasser", department="Finance", salary=8000),
+    customers = [
+        Customer(name="Ali Hasan", company="Acme Corp", credit_limit=7000),
+        Customer(name="Sara Khalil", company="Globex", credit_limit=6500),
+        Customer(name="Omar Nasser", company="Initech", credit_limit=8000),
     ]
-    db.add_all(employees)
+    db.add_all(customers)
 
     db.commit()

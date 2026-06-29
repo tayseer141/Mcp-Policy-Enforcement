@@ -1,13 +1,21 @@
+"""
+Customer REST API.
+
+A thin JSON surface over the customer dataset that runs every mutation
+through the same policy engine the MCP tools use. (The module filename is
+historical — it now serves the /customers routes.)
+"""
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 
 from app.db.deps import get_db
-from app.models.employee_model import Employee
+from app.models.customer_model import Customer
 from app.models.rbac_models import User
 from app.policy.engine import authorize_tool_request
 
-router = APIRouter(prefix="/employees", tags=["employees"])
+router = APIRouter(prefix="/customers", tags=["customers"])
 
 def get_user_or_404(db: Session, username: str) -> User:
     user = db.query(User).filter(User.username == username).first()
@@ -16,89 +24,89 @@ def get_user_or_404(db: Session, username: str) -> User:
     return user
 
 @router.get("/")
-def get_employees(username: str, db: Session = Depends(get_db)):
+def get_customers(username: str, db: Session = Depends(get_db)):
     user = get_user_or_404(db, username)
-    
+
     # Check authorization using the Policy Engine
     decision = authorize_tool_request(
         db=db,
         user=user,
-        tool_name="get_employees",
-        required_permission="get_employees",
+        tool_name="get_customers",
+        required_permission="get_customers",
         arguments={}
     )
-    
+
     if not decision.allowed:
         raise HTTPException(status_code=403, detail=decision.reason)
 
-    employees = db.query(Employee).all()
+    customers = db.query(Customer).all()
     return [
         {
-            "id": emp.id,
-            "name": emp.name,
-            "department": emp.department,
-            "salary": emp.salary,
+            "id": cust.id,
+            "name": cust.name,
+            "company": cust.company,
+            "credit_limit": cust.credit_limit,
         }
-        for emp in employees
+        for cust in customers
     ]
 
-@router.put("/{employee_id}/salary")
-def update_salary(employee_id: int, username: str, new_salary: int, db: Session = Depends(get_db)):
+@router.put("/{customer_id}/credit-limit")
+def update_credit_limit(customer_id: int, username: str, new_credit_limit: int, db: Session = Depends(get_db)):
     user = get_user_or_404(db, username)
-    args = {"employee_id": employee_id, "new_salary": new_salary}
-    
-    # 🛡️ THE SECURITY HEART: runs the engine's RBAC + intent + admin-configured salary-raise policy
+    args = {"customer_id": customer_id, "new_credit_limit": new_credit_limit}
+
+    # 🛡️ THE SECURITY HEART: runs the engine's RBAC + intent + admin-configured credit-limit-raise policy
     decision = authorize_tool_request(
         db=db,
         user=user,
-        tool_name="update_salary",
-        required_permission="update_salary",
+        tool_name="update_credit_limit",
+        required_permission="update_credit_limit",
         arguments=args
     )
-    
+
     if not decision.allowed:
         raise HTTPException(status_code=403, detail=decision.reason)
 
-    employee = db.query(Employee).filter(Employee.id == employee_id).first()
-    if not employee:
-        raise HTTPException(status_code=404, detail="Employee not found")
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
 
-    employee.salary = new_salary
+    customer.credit_limit = new_credit_limit
     db.commit()
-    db.refresh(employee)
+    db.refresh(customer)
 
     return {
-        "message": "Salary updated successfully",
-        "employee": {
-            "id": employee.id,
-            "name": employee.name,
-            "department": employee.department,
-            "salary": employee.salary,
+        "message": "Credit limit updated successfully",
+        "customer": {
+            "id": customer.id,
+            "name": customer.name,
+            "company": customer.company,
+            "credit_limit": customer.credit_limit,
         },
     }
 
-@router.delete("/{employee_id}")
-def delete_employee(employee_id: int, username: str, db: Session = Depends(get_db)):
+@router.delete("/{customer_id}")
+def delete_customer(customer_id: int, username: str, db: Session = Depends(get_db)):
     user = get_user_or_404(db, username)
-    args = {"employee_id": employee_id}
-    
+    args = {"customer_id": customer_id}
+
     # 🛡️ This calls the "Mass Deletion" check
     decision = authorize_tool_request(
         db=db,
         user=user,
-        tool_name="delete_employee",
-        required_permission="delete_employee",
+        tool_name="delete_customer",
+        required_permission="delete_customer",
         arguments=args
     )
-    
+
     if not decision.allowed:
         raise HTTPException(status_code=403, detail=decision.reason)
 
-    employee = db.query(Employee).filter(Employee.id == employee_id).first()
-    if not employee:
-        raise HTTPException(status_code=404, detail="Employee not found")
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
 
-    db.delete(employee)
+    db.delete(customer)
     db.commit()
 
-    return {"message": f"Employee {employee_id} deleted successfully"}
+    return {"message": f"Customer {customer_id} deleted successfully"}

@@ -2,7 +2,7 @@ from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.employee_model import Employee
+from app.models.customer_model import Customer
 from app.models.rbac_models import User
 from app.policy.engine import authorize_tool_request, RAW_PROMPT_ARG_KEY
 
@@ -79,92 +79,92 @@ def execute_tool_locally(
             "server": "policy-enforcement-mcp",
         }
 
-    if tool_name == "get_employees":
-        employees = db.query(Employee).all()
+    if tool_name == "get_customers":
+        customers = db.query(Customer).all()
         return [
             {
-                "id": emp.id,
-                "name": emp.name,
-                "department": emp.department,
-                "salary": emp.salary,
+                "id": cust.id,
+                "name": cust.name,
+                "company": cust.company,
+                "credit_limit": cust.credit_limit,
             }
-            for emp in employees
+            for cust in customers
         ]
 
-    if tool_name == "get_employee_by_id":
-        employee_id = arguments.get("employee_id")
-        if employee_id is None:
-            raise ValueError("employee_id is required")
+    if tool_name == "get_customer_by_id":
+        customer_id = arguments.get("customer_id")
+        if customer_id is None:
+            raise ValueError("customer_id is required")
 
-        employee = db.query(Employee).filter(Employee.id == employee_id).first()
-        if not employee:
-            raise ValueError("Employee not found")
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        if not customer:
+            raise ValueError("Customer not found")
 
         return {
-            "id": employee.id,
-            "name": employee.name,
-            "department": employee.department,
-            "salary": employee.salary,
+            "id": customer.id,
+            "name": customer.name,
+            "company": customer.company,
+            "credit_limit": customer.credit_limit,
         }
 
-    if tool_name == "update_salary":
-        employee_id = arguments.get("employee_id")
-        new_salary = arguments.get("new_salary")
+    if tool_name == "update_credit_limit":
+        customer_id = arguments.get("customer_id")
+        new_credit_limit = arguments.get("new_credit_limit")
 
-        if employee_id is None or new_salary is None:
-            raise ValueError("employee_id and new_salary are required")
+        if customer_id is None or new_credit_limit is None:
+            raise ValueError("customer_id and new_credit_limit are required")
 
-        employee = db.query(Employee).filter(Employee.id == employee_id).first()
-        if not employee:
-            raise ValueError("Employee not found")
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        if not customer:
+            raise ValueError("Customer not found")
 
-        employee.salary = new_salary
+        customer.credit_limit = new_credit_limit
         db.commit()
-        db.refresh(employee)
+        db.refresh(customer)
 
         return {
-            "message": "Salary updated successfully",
-            "employee": {
-                "id": employee.id,
-                "name": employee.name,
-                "department": employee.department,
-                "salary": employee.salary,
+            "message": "Credit limit updated successfully",
+            "customer": {
+                "id": customer.id,
+                "name": customer.name,
+                "company": customer.company,
+                "credit_limit": customer.credit_limit,
             },
         }
 
-    if tool_name == "add_employee":
+    if tool_name == "add_customer":
         name = arguments.get("name")
-        department = arguments.get("department")
-        salary = arguments.get("salary")
+        company = arguments.get("company")
+        credit_limit = arguments.get("credit_limit")
 
-        if not name or not department or salary is None:
-            raise ValueError("name, department and salary are required")
+        if not name or not company or credit_limit is None:
+            raise ValueError("name, company and credit_limit are required")
 
-        employee = Employee(name=name, department=department, salary=salary)
-        db.add(employee)
+        customer = Customer(name=name, company=company, credit_limit=credit_limit)
+        db.add(customer)
         db.commit()
-        db.refresh(employee)
+        db.refresh(customer)
 
         return {
-            "message": "Employee added successfully",
-            "employee": {
-                "id": employee.id,
-                "name": employee.name,
-                "department": employee.department,
-                "salary": employee.salary,
+            "message": "Customer added successfully",
+            "customer": {
+                "id": customer.id,
+                "name": customer.name,
+                "company": customer.company,
+                "credit_limit": customer.credit_limit,
             },
         }
 
-    if tool_name == "delete_employee":
-        employee_ids = arguments.get("employee_ids")
-        employee_id = arguments.get("employee_id")
+    if tool_name == "delete_customer":
+        customer_ids = arguments.get("customer_ids")
+        customer_id = arguments.get("customer_id")
 
-        if isinstance(employee_ids, list) and employee_ids:
+        if isinstance(customer_ids, list) and customer_ids:
             deleted_count = 0
-            for emp_id in employee_ids:
-                employee = db.query(Employee).filter(Employee.id == emp_id).first()
-                if employee:
-                    db.delete(employee)
+            for cust_id in customer_ids:
+                customer = db.query(Customer).filter(Customer.id == cust_id).first()
+                if customer:
+                    db.delete(customer)
                     deleted_count += 1
             db.commit()
             return {
@@ -172,18 +172,18 @@ def execute_tool_locally(
                 "deleted_count": deleted_count,
             }
 
-        if employee_id is not None:
-            employee = db.query(Employee).filter(Employee.id == employee_id).first()
-            if not employee:
-                raise ValueError("Employee not found")
+        if customer_id is not None:
+            customer = db.query(Customer).filter(Customer.id == customer_id).first()
+            if not customer:
+                raise ValueError("Customer not found")
 
-            db.delete(employee)
+            db.delete(customer)
             db.commit()
             return {
-                "message": f"Employee {employee_id} deleted successfully",
+                "message": f"Customer {customer_id} deleted successfully",
                 "deleted_count": 1,
             }
 
-        raise ValueError("Missing employee_id or employee_ids")
+        raise ValueError("Missing customer_id or customer_ids")
 
     raise ValueError(f"Unknown tool '{tool_name}'")

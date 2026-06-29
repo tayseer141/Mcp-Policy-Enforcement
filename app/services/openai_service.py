@@ -24,7 +24,7 @@ If no tool is appropriate, do not call any tool.
 IMPORTANT: Never provide a value for the `username` or `raw_prompt`
 parameters. Both are injected by the server from the authenticated
 session and the original request. Focus only on the operational
-parameters (employee_id, new_salary, etc.).
+parameters (customer_id, new_credit_limit, etc.).
 """
 
 

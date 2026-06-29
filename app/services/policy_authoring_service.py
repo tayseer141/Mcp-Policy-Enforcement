@@ -90,8 +90,8 @@ def _finalise(
             source=source,
             explanation=(
                 "Could not match this to a policy the engine can enforce. "
-                "Supported policies: a maximum number of employees deletable "
-                "per request, and a maximum salary-raise percentage."
+                "Supported policies: a maximum number of customers deletable "
+                "per request, and a maximum credit-limit-raise percentage."
             ),
         )
 
@@ -150,35 +150,39 @@ def _draft_with_heuristic(text: str) -> PolicyDraft:
     percent_signal = ("%" in low) or ("percent" in low) or ("percentage" in low)
     start_signal = any(
         w in low for w in (
-            "starting salary", "start salary", "new hire", "new hires",
-            "new employee", "new employees", "hiring", "onboard",
-            "add employee", "adding employee",
+            "starting salary", "start salary", "starting credit", "new hire", "new hires",
+            "new employee", "new employees", "new customer", "new customers",
+            "hiring", "onboard", "onboarding",
+            "add employee", "adding employee", "add customer", "adding customer",
         )
     )
     salary_signal = percent_signal or any(
-        w in low for w in ("salary", "salaries", "raise", "pay", "wage", "compensation")
+        w in low for w in (
+            "salary", "salaries", "raise", "pay", "wage", "compensation",
+            "credit", "credit limit", "limit",
+        )
     )
 
     # Starting-salary phrasing is specific to new hires; check it before the
     # generic salary branch so "cap starting salary at 8000" doesn't get
     # mistaken for a raise policy.
     if start_signal:
-        return _finalise("max_starting_salary", number, "heuristic", text)
+        return _finalise("max_starting_credit_limit", number, "heuristic", text)
     # A percentage signal is specific to the salary-raise policy.
     if salary_signal and percent_signal:
-        return _finalise("max_salary_raise_percent", number, "heuristic", text)
+        return _finalise("max_credit_limit_raise_percent", number, "heuristic", text)
     if delete_signal:
         return _finalise("max_delete_count", number, "heuristic", text)
     if salary_signal:
-        return _finalise("max_salary_raise_percent", number, "heuristic", text)
+        return _finalise("max_credit_limit_raise_percent", number, "heuristic", text)
 
     return PolicyDraft(
         valid=False,
         source="heuristic",
         explanation=(
             "Couldn't tell which policy you mean. Try phrasing it like "
-            "“limit deletes to 2 employees per request”, “cap salary raises "
-            "at 15%”, or “new hires can't start above 9000”."
+            "“limit deletes to 2 customers per request”, “cap credit-limit "
+            "raises at 15%”, or “new customers can't start above 9000”."
         ),
     )
 
@@ -189,15 +193,16 @@ def _draft_with_heuristic(text: str) -> PolicyDraft:
 
 _LLM_SYSTEM = """
 You convert an administrator's natural-language instruction into a single
-structured security policy for an employee database system.
+structured security policy for a customer database system.
 
 You may ONLY choose from these policy types:
-- "max_delete_count": the maximum number of employee records that may be
+- "max_delete_count": the maximum number of customer records that may be
   deleted in one request. threshold is a whole number >= 1.
-- "max_salary_raise_percent": the maximum percentage a salary may be
-  raised in one update. threshold is a number >= 0 (e.g. 15 means 15%).
-- "max_starting_salary": the maximum starting salary allowed when adding /
-  hiring a NEW employee. threshold is an absolute amount >= 0 (e.g. 9000).
+- "max_credit_limit_raise_percent": the maximum percentage a customer's credit
+  limit may be raised in one update. threshold is a number >= 0 (e.g. 15
+  means 15%).
+- "max_starting_credit_limit": the maximum starting credit limit allowed when
+  adding a NEW customer. threshold is an absolute amount >= 0 (e.g. 9000).
 
 Respond with a JSON object only, no prose:
 {"policy_type": <one of the three strings or null>,

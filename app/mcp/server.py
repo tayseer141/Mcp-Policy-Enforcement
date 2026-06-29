@@ -12,7 +12,7 @@ from app.services.local_tool_executor import execute_tool_locally
 # Force SQLAlchemy to register all model classes on the Base metadata
 # so create_all() sees every table.
 import app.models.rbac_models  # noqa: F401
-import app.models.employee_model  # noqa: F401
+import app.models.customer_model  # noqa: F401
 import app.models.audit_model  # noqa: F401  (admin dashboard audit trail)
 import app.models.policy_model  # noqa: F401  (admin-managed business policies)
 
@@ -59,15 +59,15 @@ def health_check(username: str, raw_prompt: str = "") -> dict:
 
 
 @mcp.tool()
-def get_employees(username: str, raw_prompt: str = "") -> list[dict]:
-    """Retrieve all employee records (Requires 'get_employees' permission)."""
+def get_customers(username: str, raw_prompt: str = "") -> list[dict]:
+    """Retrieve all customer records (Requires 'get_customers' permission)."""
     db = SessionLocal()
     try:
         return execute_tool_locally(
             db=db,
             username=username,
-            tool_name="get_employees",
-            required_permission="get_employees",
+            tool_name="get_customers",
+            required_permission="get_customers",
             arguments={},
             raw_prompt=raw_prompt,
         )
@@ -76,18 +76,18 @@ def get_employees(username: str, raw_prompt: str = "") -> list[dict]:
 
 
 @mcp.tool()
-def get_employee_by_id(
-    username: str, employee_id: int, raw_prompt: str = ""
+def get_customer_by_id(
+    username: str, customer_id: int, raw_prompt: str = ""
 ) -> dict:
-    """Retrieve a single employee by ID (Requires 'get_employee_by_id' permission)."""
+    """Retrieve a single customer by ID (Requires 'get_customer_by_id' permission)."""
     db = SessionLocal()
     try:
         return execute_tool_locally(
             db=db,
             username=username,
-            tool_name="get_employee_by_id",
-            required_permission="get_employee_by_id",
-            arguments={"employee_id": employee_id},
+            tool_name="get_customer_by_id",
+            required_permission="get_customer_by_id",
+            arguments={"customer_id": customer_id},
             raw_prompt=raw_prompt,
         )
     finally:
@@ -95,23 +95,23 @@ def get_employee_by_id(
 
 
 @mcp.tool()
-def update_salary(
+def update_credit_limit(
     username: str,
-    employee_id: int,
-    new_salary: int,
+    customer_id: int,
+    new_credit_limit: int,
     raw_prompt: str = "",
 ) -> dict:
-    """Update an employee's salary. Enforces RBAC, intent alignment, and the admin-configurable max salary-raise policy."""
+    """Update a customer's credit limit. Enforces RBAC, intent alignment, and the admin-configurable max credit-limit-raise policy."""
     db = SessionLocal()
     try:
         return execute_tool_locally(
             db=db,
             username=username,
-            tool_name="update_salary",
-            required_permission="update_salary",
+            tool_name="update_credit_limit",
+            required_permission="update_credit_limit",
             arguments={
-                "employee_id": employee_id,
-                "new_salary": new_salary,
+                "customer_id": customer_id,
+                "new_credit_limit": new_credit_limit,
             },
             raw_prompt=raw_prompt,
         )
@@ -120,25 +120,25 @@ def update_salary(
 
 
 @mcp.tool()
-def delete_employee(
+def delete_customer(
     username: str,
-    employee_id: Optional[int] = None,
-    employee_ids: Optional[list[int]] = None,
+    customer_id: Optional[int] = None,
+    customer_ids: Optional[list[int]] = None,
     delete_all: bool = False,
     raw_prompt: str = "",
 ) -> dict:
     """
-    Delete one or more employee records.
+    Delete one or more customer records.
     Enforces RBAC, intent alignment, and the mass-deletion policy.
 
-    Provide exactly one of: employee_id (single), employee_ids (list),
+    Provide exactly one of: customer_id (single), customer_ids (list),
     or delete_all=True (will be blocked by the policy engine).
     """
     arguments: dict = {}
-    if employee_id is not None:
-        arguments["employee_id"] = employee_id
-    if employee_ids is not None:
-        arguments["employee_ids"] = employee_ids
+    if customer_id is not None:
+        arguments["customer_id"] = customer_id
+    if customer_ids is not None:
+        arguments["customer_ids"] = customer_ids
     if delete_all:
         arguments["delete_all"] = True
 
@@ -147,8 +147,8 @@ def delete_employee(
         return execute_tool_locally(
             db=db,
             username=username,
-            tool_name="delete_employee",
-            required_permission="delete_employee",
+            tool_name="delete_customer",
+            required_permission="delete_customer",
             arguments=arguments,
             raw_prompt=raw_prompt,
         )
@@ -157,25 +157,25 @@ def delete_employee(
 
 
 @mcp.tool()
-def add_employee(
+def add_customer(
     username: str,
     name: str,
-    department: str,
-    salary: int,
+    company: str,
+    credit_limit: int,
     raw_prompt: str = "",
 ) -> dict:
-    """Create a new employee record. Enforces RBAC, intent alignment, and the admin-configurable max starting-salary policy."""
+    """Create a new customer record. Enforces RBAC, intent alignment, and the admin-configurable max starting-credit-limit policy."""
     db = SessionLocal()
     try:
         return execute_tool_locally(
             db=db,
             username=username,
-            tool_name="add_employee",
-            required_permission="add_employee",
+            tool_name="add_customer",
+            required_permission="add_customer",
             arguments={
                 "name": name,
-                "department": department,
-                "salary": salary,
+                "company": company,
+                "credit_limit": credit_limit,
             },
             raw_prompt=raw_prompt,
         )

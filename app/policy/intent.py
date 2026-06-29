@@ -33,12 +33,12 @@ logger = logging.getLogger("intent-policy")
 # Map each registered MCP tool to the intent tags it legitimately serves.
 # Keep this tight -- a loose mapping defeats the purpose.
 TOOL_INTENT_MAP: dict[str, set[str]] = {
-    "health_check":       {"read", "admin"},
-    "get_employees":      {"read"},
-    "get_employee_by_id": {"read"},
-    "update_salary":      {"update"},
-    "delete_employee":    {"delete"},
-    "add_employee":       {"create"},
+    "health_check":        {"read", "admin"},
+    "get_customers":       {"read"},
+    "get_customer_by_id":  {"read"},
+    "update_credit_limit": {"update"},
+    "delete_customer":     {"delete"},
+    "add_customer":        {"create"},
 }
 
 ALLOWED_INTENT_TAGS = {"read", "create", "update", "delete", "admin", "unknown"}
@@ -59,8 +59,8 @@ _CLASSIFIER_SYSTEM_PROMPT = (
     "Allowed tags: read, create, update, delete, admin, unknown. "
     "Rules:\n"
     "- 'read' = retrieve/show/list/find information, no mutation.\n"
-    "- 'create' = add/insert a NEW record (e.g. add/hire a new employee).\n"
-    "- 'update' = modify an existing record's field (salary, etc.).\n"
+    "- 'create' = add/insert a NEW record (e.g. add a new customer).\n"
+    "- 'update' = modify an existing record's field (credit limit, etc.).\n"
     "- 'delete' = remove one or more records.\n"
     "- 'admin' = manage roles, users, or permissions.\n"
     "- 'unknown' = greeting, chit-chat, empty, or not actionable.\n"

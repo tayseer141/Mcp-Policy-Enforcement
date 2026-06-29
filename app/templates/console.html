@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ title }} — MCP Policy Enforcement</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='console.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='console.css') }}?v={{ asset_version }}">
 </head>
 <body>
   <header class="topbar">
@@ -47,12 +47,12 @@
           <label class="input-label" for="prompt">Natural-language request</label>
           <span class="field-label">Try one</span>
           <div class="sample-prompts" id="sample-prompts">
-            <button type="button" class="prompt-chip" data-prompt="Show all employees">Show all employees</button>
-            <button type="button" class="prompt-chip" data-prompt="Get the employee with ID 1">Get employee #1</button>
-            <button type="button" class="prompt-chip danger" data-prompt="Update the salary of employee 2 to 90000">Update a salary</button>
-            <button type="button" class="prompt-chip danger" data-prompt="Delete employee 3">Delete an employee</button>
+            <button type="button" class="prompt-chip" data-prompt="Show all customers">Show all customers</button>
+            <button type="button" class="prompt-chip" data-prompt="Get the customer with ID 1">Get customer #1</button>
+            <button type="button" class="prompt-chip danger" data-prompt="Update the credit limit of customer 2 to 90000">Update a credit limit</button>
+            <button type="button" class="prompt-chip danger" data-prompt="Delete customer 3">Delete a customer</button>
           </div>
-          <textarea name="prompt" id="prompt" placeholder="e.g. Show all employees" required></textarea>
+          <textarea name="prompt" id="prompt" placeholder="e.g. Show all customers" required></textarea>
         </div>
 
         <button type="submit" class="btn" id="submit-btn">Run secure request</button>
@@ -67,6 +67,6 @@
      dropdown change. tojson handles JSON encoding + HTML escaping. #}
   <script id="users-data" type="application/json">{{ users|tojson|safe }}</script>
 
-  <script src="{{ url_for('static', path='console.js') }}"></script>
+  <script src="{{ url_for('static', path='console.js') }}?v={{ asset_version }}"></script>
 </body>
 </html>

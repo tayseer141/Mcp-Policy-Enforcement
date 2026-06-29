@@ -20,7 +20,7 @@ GET  /admin                             overview (counters + recent decisions)
 GET  /admin/audit                       filterable audit log
 GET  /admin/users                       users page (mutations via JSON API)
 GET  /admin/roles                       roles page (mutations via JSON API)
-GET  /admin/employees                   employee directory (read-only)
+GET  /admin/customers                   customer directory (read-only)
 
 Access control
 --------------
@@ -39,7 +39,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.db.deps import get_db
-from app.models.employee_model import Employee
+from app.models.customer_model import Customer
 from app.models.rbac_models import Permission, Role, User
 from app.services.audit_service import (
     decision_counters,
@@ -275,21 +275,21 @@ def roles_view(
 # --- employees ---------------------------------------------------------
 
 
-@router.get("/employees", response_class=HTMLResponse)
-def employees_view(
+@router.get("/customers", response_class=HTMLResponse)
+def customers_view(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_admin),
 ):
-    employees = db.query(Employee).order_by(Employee.id.asc()).all()
+    customers = db.query(Customer).order_by(Customer.id.asc()).all()
     return templates.TemplateResponse(
-        "admin/employees.html",
+        "admin/customers.html",
         {
             "request": request,
-            "title": "Employees",
+            "title": "Customers",
             "admin_user": user,
-            "employees": employees,
-            "active_tab": "employees",
+            "customers": customers,
+            "active_tab": "customers",
         },
     )
 

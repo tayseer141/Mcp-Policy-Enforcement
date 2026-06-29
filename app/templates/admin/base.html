@@ -2,202 +2,356 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ title }} — MCP Policy Enforcement</title>
   <style>
+    /* ============================================================
+       MCP Policy Enforcement — Admin Dashboard
+       Shares the "Neon Command Deck" look of the secure console:
+       dark glassmorphism · neon cyan/violet energy · animated grid.
+       Class + variable names are preserved so every page template
+       keeps working unchanged.
+       ============================================================ */
     :root {
-      --bg: #0f172a;
-      --panel: #1e293b;
-      --panel-2: #273449;
-      --muted: #94a3b8;
-      --text: #e2e8f0;
-      --accent: #38bdf8;
-      --ok: #22c55e;
-      --warn: #f59e0b;
-      --deny: #ef4444;
-      --border: #334155;
+      /* Base surfaces (names kept for backward-compat with page templates) */
+      --bg: #060912;
+      --bg-1: #0a0f1f;
+      --panel: rgba(17, 24, 43, 0.92);
+      --panel-solid: #111a30;
+      --panel-2: rgba(38, 50, 82, 0.5);
+      --border: rgba(120, 150, 220, 0.18);
+      --border-strong: rgba(130, 170, 255, 0.4);
+
+      /* Text */
+      --text: #e6edf8;
+      --muted: #8ea2c4;
+      --faint: #5d6f93;
+
+      /* Neon accents */
+      --accent: #38e8ff;     /* cyan — primary accent (name kept) */
+      --cyan: #38e8ff;
+      --cyan-soft: rgba(56, 232, 255, 0.16);
+      --violet: #a78bfa;
+      --violet-soft: rgba(167, 139, 250, 0.16);
+      --ok: #2ee6a6;
+      --ok-soft: rgba(46, 230, 166, 0.15);
+      --warn: #ffb454;
+      --deny: #ff5d73;
+      --deny-soft: rgba(255, 93, 115, 0.16);
+
+      --glow-cyan: 0 0 18px rgba(56, 232, 255, 0.55);
+      --glow-ok: 0 0 18px rgba(46, 230, 166, 0.55);
+      --glow-deny: 0 0 22px rgba(255, 93, 115, 0.6);
     }
+
     * { box-sizing: border-box; }
+    html, body { height: 100%; }
     body {
       margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
       color: var(--text);
       font-size: 14px;
+      background:
+        radial-gradient(1100px 600px at 12% -8%, rgba(56, 232, 255, 0.10), transparent 60%),
+        radial-gradient(1000px 700px at 110% 10%, rgba(167, 139, 250, 0.12), transparent 55%),
+        radial-gradient(900px 900px at 50% 120%, rgba(46, 230, 166, 0.07), transparent 60%),
+        var(--bg);
+      min-height: 100vh;
+      overflow-x: hidden;
     }
-    a { color: var(--accent); text-decoration: none; }
-    a:hover { text-decoration: underline; }
+
+    /* Faint moving perspective grid behind everything (GPU-composited). */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: -20% -20% 0;
+      height: 80vh;
+      background-image:
+        linear-gradient(rgba(120, 160, 240, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(120, 160, 240, 0.05) 1px, transparent 1px);
+      background-size: 46px 46px;
+      transform-origin: top center;
+      opacity: 0.4;
+      will-change: transform;
+      animation: gridDrift 30s linear infinite;
+      pointer-events: none;
+      z-index: 0;
+    }
+    @keyframes gridDrift {
+      from { transform: perspective(620px) rotateX(60deg) translateY(0); }
+      to   { transform: perspective(620px) rotateX(60deg) translateY(46px); }
+    }
+
+    a { color: var(--cyan); text-decoration: none; transition: color .15s, text-shadow .15s; }
+    a:hover { text-shadow: var(--glow-cyan); }
+
+    /* ===== Topbar ===== */
     header.topbar {
+      position: relative;
+      z-index: 2;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 14px 24px;
-      background: var(--panel);
+      padding: 16px 28px;
+      background: rgba(11, 17, 32, 0.92);
       border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(6px);
     }
     header.topbar .brand {
-      font-weight: 600;
-      letter-spacing: 0.2px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
       color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
+    header.topbar .brand .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--ok);
+      box-shadow: var(--glow-ok);
+      animation: livePulse 2s ease-in-out infinite;
+    }
+    @keyframes livePulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
     header.topbar .brand small {
-      color: var(--muted);
-      font-weight: 400;
-      margin-left: 8px;
+      color: var(--muted); font-weight: 500; letter-spacing: 2px;
+      text-transform: uppercase; font-size: 10.5px; margin-left: 2px;
     }
-    header.topbar .session {
-      color: var(--muted);
-      font-size: 13px;
-    }
+    header.topbar .session { color: var(--muted); font-size: 13px; }
     header.topbar .session strong { color: var(--text); }
     header.topbar form { display: inline; margin-left: 10px; }
     header.topbar button.logout {
-      background: transparent;
+      background: var(--panel-2);
       color: var(--muted);
       border: 1px solid var(--border);
-      padding: 4px 10px;
-      border-radius: 4px;
+      padding: 5px 12px;
+      border-radius: 8px;
       cursor: pointer;
+      font-family: inherit;
+      transition: color .15s, border-color .15s, box-shadow .15s;
     }
-    header.topbar button.logout:hover { color: var(--text); border-color: var(--muted); }
+    header.topbar button.logout:hover {
+      color: var(--text); border-color: var(--cyan); box-shadow: var(--glow-cyan);
+    }
 
+    /* ===== Tabs ===== */
     nav.tabs {
+      position: relative;
+      z-index: 2;
       display: flex;
-      gap: 2px;
-      background: var(--panel);
-      padding: 0 24px;
+      gap: 4px;
+      background: rgba(11, 17, 32, 0.72);
+      padding: 0 28px;
       border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(6px);
     }
     nav.tabs a {
-      padding: 10px 16px;
+      padding: 12px 16px;
       color: var(--muted);
       border-bottom: 2px solid transparent;
+      transition: color .15s, border-color .15s, text-shadow .15s;
     }
+    nav.tabs a:hover { color: var(--text); text-shadow: none; }
     nav.tabs a.active {
-      color: var(--text);
-      border-bottom-color: var(--accent);
+      color: var(--cyan);
+      border-bottom-color: var(--cyan);
+      text-shadow: var(--glow-cyan);
     }
 
-    main.content { padding: 24px; max-width: 1200px; margin: 0 auto; }
-    h1 { font-size: 20px; margin: 0 0 20px 0; font-weight: 600; }
-    h2 { font-size: 16px; margin: 28px 0 12px 0; font-weight: 600; color: var(--text); }
+    /* ===== Layout ===== */
+    main.content { position: relative; z-index: 1; padding: 32px 24px 80px; max-width: 1200px; margin: 0 auto; }
+    h1 {
+      font-size: 26px; margin: 0 0 20px 0; font-weight: 800; letter-spacing: -0.4px;
+      background: linear-gradient(90deg, #ffffff, var(--cyan) 55%, var(--violet));
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 2px 18px rgba(56, 232, 255, 0.2));
+    }
+    h2 { font-size: 16px; margin: 30px 0 14px 0; font-weight: 700; color: var(--text); letter-spacing: 0.2px; }
 
+    /* ===== Stat cards ===== */
     .cards {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 14px;
-      margin-bottom: 24px;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 16px;
+      margin-bottom: 26px;
     }
     .card {
-      background: var(--panel);
+      position: relative;
+      background: rgba(17, 24, 43, 0.92);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 16px 18px;
+      border-radius: 18px;
+      padding: 18px 20px;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.04);
     }
+    /* static neon gradient hairline along the border */
+    .card::before {
+      content: "";
+      position: absolute; inset: 0;
+      border-radius: inherit;
+      padding: 1px;
+      background: linear-gradient(120deg, transparent, var(--cyan), var(--violet), transparent);
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      opacity: 0.45;
+      pointer-events: none;
+    }
+    .card > * { position: relative; }
     .card .label {
       color: var(--muted);
-      font-size: 12px;
+      font-size: 11px;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.12em;
     }
-    .card .value { font-size: 28px; font-weight: 600; margin-top: 6px; }
-    .card.allow .value { color: var(--ok); }
-    .card.deny .value { color: var(--deny); }
-    .card.stage .value { font-size: 20px; }
+    .card .value { font-size: 30px; font-weight: 800; margin-top: 6px; letter-spacing: -0.5px; }
+    .card.allow .value { color: var(--ok); text-shadow: var(--glow-ok); }
+    .card.deny .value { color: var(--deny); text-shadow: var(--glow-deny); }
+    .card.stage .value { font-size: 18px; display: flex; flex-wrap: wrap; gap: 6px; text-shadow: none; }
 
+    /* ===== Tables ===== */
     table {
       width: 100%;
       border-collapse: collapse;
-      background: var(--panel);
+      background: rgba(10, 16, 32, 0.6);
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: 14px;
       overflow: hidden;
     }
     th, td {
       text-align: left;
-      padding: 10px 12px;
+      padding: 11px 13px;
       border-bottom: 1px solid var(--border);
       vertical-align: top;
     }
     th {
-      background: var(--panel-2);
+      background: rgba(38, 50, 82, 0.6);
       color: var(--muted);
-      font-weight: 500;
-      font-size: 12px;
+      font-weight: 600;
+      font-size: 11px;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.07em;
     }
     tr:last-child td { border-bottom: none; }
-    tr:hover td { background: rgba(255, 255, 255, 0.02); }
+    tbody tr { transition: background .15s; }
+    tr:hover td { background: rgba(56, 232, 255, 0.05); }
 
+    /* ===== Pills ===== */
     .pill {
       display: inline-block;
-      padding: 2px 8px;
+      padding: 3px 10px;
       border-radius: 999px;
       font-size: 12px;
-      font-weight: 500;
+      font-weight: 600;
       border: 1px solid transparent;
     }
-    .pill.allow { background: rgba(34, 197, 94, 0.12); color: var(--ok); border-color: rgba(34, 197, 94, 0.35); }
-    .pill.deny  { background: rgba(239, 68, 68, 0.12); color: var(--deny); border-color: rgba(239, 68, 68, 0.35); }
+    .pill.allow { background: var(--ok-soft); color: var(--ok); border-color: rgba(46, 230, 166, 0.4); }
+    .pill.deny  { background: var(--deny-soft); color: var(--deny); border-color: rgba(255, 93, 115, 0.4); }
     .pill.stage { background: var(--panel-2); color: var(--text); border-color: var(--border); }
 
     code.mono {
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-size: 12px;
-      color: var(--muted);
+      color: var(--cyan);
       background: transparent;
       white-space: pre-wrap;
       word-break: break-word;
     }
 
-    form.inline { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-bottom: 16px; }
-    form.inline label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); gap: 4px; }
-    form.inline input, form.inline select {
-      background: var(--panel);
+    /* ===== Forms ===== */
+    form.inline { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-bottom: 18px; }
+    form.inline label { display: flex; flex-direction: column; font-size: 11px; color: var(--muted); gap: 5px; text-transform: uppercase; letter-spacing: 0.1em; }
+    form.inline input, form.inline select, input[type="text"], input[type="number"], select, textarea {
+      background: rgba(8, 12, 24, 0.7);
       color: var(--text);
       border: 1px solid var(--border);
-      padding: 7px 10px;
-      border-radius: 6px;
+      padding: 9px 12px;
+      border-radius: 10px;
       font-size: 13px;
+      font-family: inherit;
       min-width: 140px;
+      transition: border-color .18s, box-shadow .18s;
     }
-    form.inline button, .btn {
-      background: var(--accent);
-      color: #0b1220;
-      border: 0;
-      padding: 8px 14px;
-      border-radius: 6px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    form.inline button.secondary, .btn.secondary {
-      background: var(--panel);
-      color: var(--text);
-      border: 1px solid var(--border);
-      font-weight: 500;
+    form.inline input:focus, form.inline select:focus,
+    input:focus, select:focus, textarea:focus {
+      outline: none; border-color: var(--cyan);
+      box-shadow: 0 0 0 3px var(--cyan-soft), var(--glow-cyan);
     }
 
-    .notice {
-      padding: 10px 14px;
-      background: rgba(56, 189, 248, 0.08);
-      border: 1px solid rgba(56, 189, 248, 0.3);
+    /* ===== Buttons ===== */
+    form.inline button, .btn, button.btn {
+      position: relative;
+      background: linear-gradient(120deg, var(--cyan), var(--violet));
+      color: #04121c;
+      border: 0;
+      padding: 9px 18px;
+      border-radius: 10px;
+      font-weight: 800;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 13px;
+      letter-spacing: 0.3px;
+      box-shadow: 0 8px 24px rgba(56, 232, 255, 0.3);
+      transition: transform .15s, box-shadow .15s, filter .15s, color .15s, border-color .15s;
+      overflow: hidden;
+    }
+    form.inline button:hover, .btn:hover, button.btn:hover {
+      transform: translateY(-1px); box-shadow: 0 12px 32px rgba(56, 232, 255, 0.45);
+    }
+    .btn:active, button.btn:active { transform: translateY(0); }
+    .btn[disabled], button.btn[disabled] { opacity: 0.7; cursor: progress; filter: saturate(0.7); }
+    /* sheen sweep on hover */
+    .btn::after, button.btn::after, form.inline button::after {
+      content: ""; position: absolute; top: 0; left: 0; width: 40%; height: 100%;
+      background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+      transform: translateX(-220%) skewX(-18deg);
+    }
+    .btn:hover::after, button.btn:hover::after, form.inline button:hover::after { animation: sheen 0.9s ease; }
+    @keyframes sheen {
+      from { transform: translateX(-220%) skewX(-18deg); }
+      to   { transform: translateX(420%) skewX(-18deg); }
+    }
+    /* Secondary / glassy buttons */
+    form.inline button.secondary, .btn.secondary, a.btn.secondary {
+      background: var(--panel-2);
       color: var(--text);
-      border-radius: 6px;
+      border: 1px solid var(--border);
+      font-weight: 600;
+      box-shadow: none;
+    }
+    form.inline button.secondary:hover, .btn.secondary:hover, a.btn.secondary:hover {
+      border-color: var(--cyan); box-shadow: var(--glow-cyan); transform: translateY(-1px);
+    }
+    .btn.secondary::after, a.btn.secondary::after { display: none; }
+
+    /* ===== Notices ===== */
+    .notice {
+      padding: 12px 16px;
+      background: var(--cyan-soft);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-left: 3px solid var(--cyan);
+      color: var(--text);
+      border-radius: 10px;
       margin-bottom: 16px;
     }
-    .notice.error { background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.4); }
+    .notice.error { background: var(--deny-soft); border-color: rgba(255, 93, 115, 0.4); border-left-color: var(--deny); }
 
     .muted { color: var(--muted); }
     .center { text-align: center; }
     .right { text-align: right; }
     .nowrap { white-space: nowrap; }
     small.ts { color: var(--muted); font-family: ui-monospace, monospace; }
+
+    /* reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
   </style>
 </head>
 <body>
   {% if admin_user %}
   <header class="topbar">
     <div class="brand">
+      <span class="dot"></span>
       MCP Policy Enforcement
       <small>admin dashboard</small>
     </div>
@@ -214,7 +368,7 @@
     <a href="/admin/users"      class="{% if active_tab == 'users' %}active{% endif %}">Users</a>
     <a href="/admin/roles"      class="{% if active_tab == 'roles' %}active{% endif %}">Roles</a>
     <a href="/admin/policies"   class="{% if active_tab == 'policies' %}active{% endif %}">Policies</a>
-    <a href="/admin/employees"  class="{% if active_tab == 'employees' %}active{% endif %}">Employees</a>
+    <a href="/admin/customers"  class="{% if active_tab == 'customers' %}active{% endif %}">Customers</a>
     <a href="/console" style="margin-left:auto; color: var(--muted);">/console ↗</a>
   </nav>
   {% endif %}

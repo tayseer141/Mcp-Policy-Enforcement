@@ -155,7 +155,7 @@
     rows.forEach((r) => Object.keys(r).forEach((k) => { if (!cols.includes(k)) cols.push(k); }));
     const head = cols.map((c) => `<th>${escapeHtml(c)}</th>`).join("");
     const body = rows.map((r) =>
-      `<tr>${cols.map((c) => `<td>${escapeHtml(formatCell(r[c]))}</td>`).join("")}</tr>`
+      `<tr>${cols.map((c) => `<td dir="auto">${escapeHtml(formatCell(r[c]))}</td>`).join("")}</tr>`
     ).join("");
     const label = rows.length === 1 ? "1 record" : `${rows.length} records`;
     return `
@@ -189,9 +189,9 @@
     if (isAllow) {
       if (data.human_summary) {
         outcome += `
-          <div class="answer" dir="auto">
+          <div class="answer">
             <div class="answer-label">Answer</div>
-            <div class="answer-text">${escapeHtml(data.human_summary)}</div>
+            <div class="answer-text" dir="auto">${escapeHtml(data.human_summary)}</div>
           </div>`;
       }
       outcome += buildTableHtml(data.tool_output);
@@ -202,9 +202,9 @@
         </details>`;
     } else {
       outcome = `
-        <div class="error-panel" dir="auto">
+        <div class="error-panel">
           <div class="error-label">Reason</div>
-          <div class="error-text">${escapeHtml(data.error_message || "(no reason returned)")}</div>
+          <div class="error-text" dir="auto">${escapeHtml(data.error_message || "(no reason returned)")}</div>
         </div>`;
     }
     const outcomeSlot = document.getElementById("outcome-slot");

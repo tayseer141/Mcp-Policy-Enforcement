@@ -1,0 +1,33 @@
+{% extends "admin/base.html" %}
+{% block content %}
+  <h1>Customers</h1>
+  <p class="muted" style="margin-top: -8px;">
+    The underlying dataset the policy engine protects. Changes here should go through the MCP tools — this view is read-only.
+  </p>
+
+  {% if not customers %}
+    <div class="notice">No customers in the database.</div>
+  {% else %}
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Company</th>
+          <th class="right">Credit limit</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cust in customers %}
+          <tr>
+            <td><code class="mono">{{ cust.id }}</code></td>
+            <td>{{ cust.name }}</td>
+            <td class="muted">{{ cust.company }}</td>
+            <td class="right"><code class="mono">{{ "{:,}".format(cust.credit_limit) }}</code></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="muted right" style="margin-top: 10px;">{{ customers|length }} customer(s)</p>
+  {% endif %}
+{% endblock %}

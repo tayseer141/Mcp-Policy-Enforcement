@@ -27,35 +27,35 @@ from typing import Optional
 # policy_type -> spec
 POLICY_TYPES: dict[str, dict] = {
     "max_delete_count": {
-        "tool_name": "delete_employee",
-        "label": "Maximum employees deletable per request",
+        "tool_name": "delete_customer",
+        "label": "Maximum customers deletable per request",
         "unit": "records",
         "value_kind": "int",      # whole number >= 1
         "default": 1,
         "help": (
-            "Block any delete_employee call that targets more than this "
+            "Block any delete_customer call that targets more than this "
             "many records (or whose scope is unclear)."
         ),
     },
-    "max_salary_raise_percent": {
-        "tool_name": "update_salary",
-        "label": "Maximum salary raise percentage",
+    "max_credit_limit_raise_percent": {
+        "tool_name": "update_credit_limit",
+        "label": "Maximum credit-limit raise percentage",
         "unit": "%",
         "value_kind": "percent",  # number >= 0
         "default": 20.0,
         "help": (
-            "Block any update_salary call that raises a salary by more "
-            "than this percentage above its current value."
+            "Block any update_credit_limit call that raises a credit limit "
+            "by more than this percentage above its current value."
         ),
     },
-    "max_starting_salary": {
-        "tool_name": "add_employee",
-        "label": "Maximum starting salary for a new hire",
+    "max_starting_credit_limit": {
+        "tool_name": "add_customer",
+        "label": "Maximum starting credit limit for a new customer",
         "unit": "",
         "value_kind": "amount",   # absolute amount >= 0
         "default": 10000.0,
         "help": (
-            "Block any add_employee call whose starting salary exceeds "
+            "Block any add_customer call whose starting credit limit exceeds "
             "this amount."
         ),
     },

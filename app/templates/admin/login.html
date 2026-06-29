@@ -1,26 +1,101 @@
 {% extends "admin/base.html" %}
 {% block content %}
-  <div style="max-width: 380px; margin: 10vh auto 0; background: var(--panel); border: 1px solid var(--border); padding: 28px; border-radius: 10px;">
-    <h1 style="margin-bottom: 6px;">Admin dashboard</h1>
-    <p class="muted" style="margin-top: 0;">Sign in with an admin username to view the security audit log.</p>
+  <style>
+    .login-wrap {
+      min-height: calc(100vh - 160px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 22px;
+    }
+    .login-brand {
+      display: flex; align-items: center; gap: 11px;
+      font-weight: 700; letter-spacing: 0.4px; font-size: 15px;
+    }
+    .login-brand .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--ok); box-shadow: var(--glow-ok);
+      animation: livePulse 2s ease-in-out infinite;
+    }
+    .login-brand small {
+      color: var(--muted); font-weight: 500; letter-spacing: 2px;
+      text-transform: uppercase; font-size: 10px;
+    }
+    .login-card {
+      position: relative;
+      width: 100%; max-width: 400px;
+      background: rgba(17, 24, 43, 0.92);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 32px 30px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+    .login-card::before {
+      content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
+      background: linear-gradient(120deg, transparent, var(--cyan), var(--violet), transparent);
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor; mask-composite: exclude;
+      opacity: 0.5; pointer-events: none;
+    }
+    .login-card > * { position: relative; }
+    .login-card h1 { font-size: 24px; margin: 0 0 6px; }
+    .login-card .sub { color: var(--muted); margin: 0 0 22px; font-size: 13.5px; line-height: 1.5; }
+    .login-field { display: flex; flex-direction: column; gap: 7px; margin-bottom: 16px; }
+    .login-field span {
+      color: var(--muted); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.14em;
+    }
+    .login-field input {
+      background: rgba(8, 12, 24, 0.7); color: var(--text);
+      border: 1px solid var(--border); padding: 12px 14px;
+      border-radius: 12px; font-size: 14px; font-family: inherit; width: 100%;
+      transition: border-color .18s, box-shadow .18s;
+    }
+    .login-field input:focus {
+      outline: none; border-color: var(--cyan);
+      box-shadow: 0 0 0 3px var(--cyan-soft), var(--glow-cyan);
+    }
+    .login-card .btn { width: 100%; padding: 13px; font-size: 14.5px; }
+    .login-foot {
+      color: var(--faint); font-size: 12px; margin: 20px 0 0; line-height: 1.55;
+    }
+    .login-foot code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--cyan); background: var(--panel-2);
+      padding: 1px 7px; border-radius: 6px; border: 1px solid var(--border);
+    }
+  </style>
 
-    {% if error == "unknown_user" %}
-      <div class="notice error">That username is not registered in the system.</div>
-    {% elif error == "not_admin" %}
-      <div class="notice error">That user is not in the <code>admin</code> role.</div>
-    {% endif %}
+  <div class="login-wrap">
+    <div class="login-brand">
+      <span class="dot"></span>
+      MCP Policy Enforcement
+      <small>admin</small>
+    </div>
 
-    <form method="post" action="/admin/login" style="display: flex; flex-direction: column; gap: 12px;">
-      <label style="display: flex; flex-direction: column; gap: 6px;">
-        <span class="muted" style="font-size: 12px;">Username</span>
-        <input type="text" name="username" autofocus autocomplete="username" required
-               style="background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 10px 12px; border-radius: 6px; font-size: 14px;">
-      </label>
-      <button type="submit" class="btn">Sign in</button>
-    </form>
+    <div class="login-card">
+      <h1>Admin dashboard</h1>
+      <p class="sub">Sign in with an admin username to view the security audit log.</p>
 
-    <p class="muted" style="font-size: 12px; margin-top: 20px;">
-      Access is gated by the same RBAC system the MCP tools use — your role must be <code>admin</code>.
-    </p>
+      {% if error == "unknown_user" %}
+        <div class="notice error">That username is not registered in the system.</div>
+      {% elif error == "not_admin" %}
+        <div class="notice error">That user is not in the <code>admin</code> role.</div>
+      {% endif %}
+
+      <form method="post" action="/admin/login">
+        <label class="login-field">
+          <span>Username</span>
+          <input type="text" name="username" autofocus autocomplete="username" required
+                 placeholder="e.g. alice">
+        </label>
+        <button type="submit" class="btn">Sign in</button>
+      </form>
+
+      <p class="login-foot">
+        Access is gated by the same RBAC system the MCP tools use — your role must be <code>admin</code>.
+      </p>
+    </div>
   </div>
 {% endblock %}
