@@ -76,10 +76,10 @@
 
     <div class="login-card">
       <h1>Admin dashboard</h1>
-      <p class="sub">Sign in with an admin username to view the security audit log.</p>
+      <p class="sub">Sign in with your admin credentials to view the security audit log.</p>
 
-      {% if error == "unknown_user" %}
-        <div class="notice error">That username is not registered in the system.</div>
+      {% if error == "bad_credentials" %}
+        <div class="notice error">Invalid username or password.</div>
       {% elif error == "not_admin" %}
         <div class="notice error">That user is not in the <code>admin</code> role.</div>
       {% endif %}
@@ -90,11 +90,17 @@
           <input type="text" name="username" autofocus autocomplete="username" required
                  placeholder="e.g. alice">
         </label>
+        <label class="login-field">
+          <span>Password</span>
+          <input type="password" name="password" autocomplete="current-password" required
+                 placeholder="••••••••">
+        </label>
         <button type="submit" class="btn">Sign in</button>
       </form>
 
       <p class="login-foot">
-        Access is gated by the same RBAC system the MCP tools use — your role must be <code>admin</code>.
+        Sessions are signed and expire automatically. Access is gated by the
+        same RBAC system the MCP tools use — your role must be <code>admin</code>.
       </p>
     </div>
   </div>

@@ -1,9 +1,12 @@
+import json
 import logging
+import secrets as _secrets
 import sys
 from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
 
+from app.core.config import settings
 from app.db.session import engine, SessionLocal
 from app.db.base import Base
 from app.db.seed import seed_data
@@ -219,5 +222,40 @@ finally:
     _db.close()
 
 
-# Expose the ASGI app. FastMCP serves the MCP endpoint at /mcp by default.
-app = mcp.streamable_http_app()
+# --- Gateway authentication --------------------------------------------
+# The MCP server is the enforcement point, so it must not be callable by
+# anyone who can reach its port. Every request must present the shared
+# gateway secret; only the web gateway holds it. Comparison is
+# constant-time. Fail-closed: no header, wrong header -> 401, no tool
+# call, no session.
+
+class GatewayAuthMiddleware:
+    """ASGI middleware: reject any HTTP request without the gateway key."""
+
+    HEADER = b"x-mcp-gateway-key"
+
+    def __init__(self, inner_app, expected_key: str):
+        self.inner_app = inner_app
+        self.expected_key = expected_key
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            headers = dict(scope.get("headers") or [])
+            presented = headers.get(self.HEADER, b"").decode("utf-8", "ignore")
+            if not _secrets.compare_digest(presented, self.expected_key):
+                body = json.dumps(
+                    {"error": "unauthorized", "detail": "Missing or invalid gateway key."}
+                ).encode()
+                await send({
+                    "type": "http.response.start",
+                    "status": 401,
+                    "headers": [(b"content-type", b"application/json")],
+                })
+                await send({"type": "http.response.body", "body": body})
+                return
+        await self.inner_app(scope, receive, send)
+
+
+# Expose the ASGI app. FastMCP serves the MCP endpoint at /mcp by default;
+# the auth wrapper guards every request that reaches it.
+app = GatewayAuthMiddleware(mcp.streamable_http_app(), settings.MCP_GATEWAY_KEY)

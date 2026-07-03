@@ -2,7 +2,7 @@
 Natural-language policy authoring.
 
 Turns an admin's plain-language sentence ("don't let anyone delete more
-than 3 employees at once", "cap raises at 15%") into a *structured draft*
+than 3 customers at once", "cap credit-limit raises at 15%") into a *structured draft*
 that maps to one of the canonical policy types in app.policy.catalog.
 
 Design principles
@@ -150,30 +150,28 @@ def _draft_with_heuristic(text: str) -> PolicyDraft:
     percent_signal = ("%" in low) or ("percent" in low) or ("percentage" in low)
     start_signal = any(
         w in low for w in (
-            "starting salary", "start salary", "starting credit", "new hire", "new hires",
-            "new employee", "new employees", "new customer", "new customers",
-            "hiring", "onboard", "onboarding",
-            "add employee", "adding employee", "add customer", "adding customer",
+            "starting credit", "starting limit", "start above", "start with",
+            "new customer", "new customers", "onboard", "onboarding",
+            "add customer", "adding customer",
         )
     )
-    salary_signal = percent_signal or any(
+    raise_signal = percent_signal or any(
         w in low for w in (
-            "salary", "salaries", "raise", "pay", "wage", "compensation",
-            "credit", "credit limit", "limit",
+            "raise", "increase", "credit", "credit limit", "limit",
         )
     )
 
-    # Starting-salary phrasing is specific to new hires; check it before the
-    # generic salary branch so "cap starting salary at 8000" doesn't get
-    # mistaken for a raise policy.
+    # Starting-credit-limit phrasing is specific to newly added customers;
+    # check it before the generic raise branch so "cap starting credit at
+    # 8000" doesn't get mistaken for a raise policy.
     if start_signal:
         return _finalise("max_starting_credit_limit", number, "heuristic", text)
-    # A percentage signal is specific to the salary-raise policy.
-    if salary_signal and percent_signal:
+    # A percentage signal is specific to the credit-limit-raise policy.
+    if raise_signal and percent_signal:
         return _finalise("max_credit_limit_raise_percent", number, "heuristic", text)
     if delete_signal:
         return _finalise("max_delete_count", number, "heuristic", text)
-    if salary_signal:
+    if raise_signal:
         return _finalise("max_credit_limit_raise_percent", number, "heuristic", text)
 
     return PolicyDraft(

@@ -38,6 +38,12 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
+from app.core.security import (
+    create_session_token,
+    verify_password,
+    verify_session_token,
+)
 from app.db.deps import get_db
 from app.models.customer_model import Customer
 from app.models.rbac_models import Permission, Role, User
@@ -55,13 +61,15 @@ templates = Jinja2Templates(directory="app/templates")
 
 # --- session helpers ---------------------------------------------------
 
-ADMIN_COOKIE_NAME = "admin_user"
+ADMIN_COOKIE_NAME = "admin_session"
 # If your seed data uses capitalised "Admin", change this to "Admin".
 ADMIN_ROLE_NAME = "admin"
 
 
 def _current_admin(request: Request, db: Session) -> Optional[User]:
-    username = request.cookies.get(ADMIN_COOKIE_NAME)
+    # The cookie is an HMAC-signed, expiring session token — not a plain
+    # username. verify_session_token fails closed on forgery or expiry.
+    username = verify_session_token(request.cookies.get(ADMIN_COOKIE_NAME))
     if not username:
         return None
 
@@ -119,22 +127,30 @@ def login_page(request: Request, error: Optional[str] = None):
 def login_submit(
     request: Request,
     username: str = Form(...),
+    password: str = Form(...),
     db: Session = Depends(get_db),
 ):
     user = db.query(User).filter(User.username == username).first()
-    if not user:
+
+    # One error code for unknown user AND wrong password, so the form
+    # can't be used to enumerate valid usernames.
+    if not user or not verify_password(password, user.password_hash):
         return RedirectResponse(
-            url="/admin/login?error=unknown_user", status_code=303
+            url="/admin/login?error=bad_credentials", status_code=303
         )
     if not user.role or user.role.name != ADMIN_ROLE_NAME:
         return RedirectResponse(
             url="/admin/login?error=not_admin", status_code=303
         )
 
+    ttl_seconds = settings.ADMIN_SESSION_TTL_HOURS * 3600
+    token = create_session_token(user.username, ttl_seconds)
+
     response = RedirectResponse(url="/admin", status_code=303)
     response.set_cookie(
         key=ADMIN_COOKIE_NAME,
-        value=user.username,
+        value=token,
+        max_age=ttl_seconds,
         httponly=True,
         samesite="lax",
     )
@@ -272,7 +288,7 @@ def roles_view(
     )
 
 
-# --- employees ---------------------------------------------------------
+# --- customers ---------------------------------------------------------
 
 
 @router.get("/customers", response_class=HTMLResponse)

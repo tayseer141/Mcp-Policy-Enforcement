@@ -19,6 +19,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.db.deps import get_db
 from app.models.rbac_models import User
 
@@ -71,5 +72,8 @@ def console_page(request: Request, db: Session = Depends(get_db)):
             "title": "MCP Secure Console",
             "users": _load_users(db),
             "asset_version": _asset_version(),
+            # When DEMO_MODE is off, the console shows a password field
+            # and sends a Bearer token with every execute request.
+            "demo_mode": settings.DEMO_MODE,
         },
     )

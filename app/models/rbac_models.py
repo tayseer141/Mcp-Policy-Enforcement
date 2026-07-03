@@ -26,6 +26,9 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True)
+    # PBKDF2 hash (see app.core.security). Nullable so pre-auth rows can
+    # be migrated in place; verify_password fails closed on None.
+    password_hash = Column(String, nullable=True)
     role_id = Column(Integer, ForeignKey("roles.id"))
 
     role = relationship("Role", back_populates="users")

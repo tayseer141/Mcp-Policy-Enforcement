@@ -15,6 +15,9 @@ This project solves this by introducing a robust **MCP-Based Policy Enforcement 
 * **🗣️ Natural Language Interface**: Users can execute complex database operations using plain text, requiring zero technical knowledge or SQL writing skills.
 * **🔒 Strict RBAC Enforcement**: A dedicated Policy Engine intercepts every tool call to verify the user's role against organizational policies before execution.
 * **🎯 Intent Alignment**: The system goes beyond technical permissions by verifying that the tool selected by the LLM accurately matches the user's original intent, preventing "hallucinated" or misinterpreted executions.
+* **📝 Admin-Managed Business Policies**: Argument-level rules (e.g. "no more than N deletes per request", "cap credit-limit raises at X%") are no longer hardcoded — they live as editable rows in a `policies` table. Admins create, tune, enable/disable and delete them from the dashboard, and the engine reads the active limit on every request so changes take effect with no redeploy.
+* **🗣️ Natural-Language Policy Authoring**: Admins can describe a rule in plain language ("don't let anyone delete more than 2 customers at once"). The system interprets it into a **structured draft** that the admin reviews and explicitly confirms before it is saved — free text is never the live enforcement artifact.
+* **🔐 Authenticated Trust Boundaries**: Users have PBKDF2-hashed passwords, the admin dashboard uses signed expiring session cookies, the execute API supports Bearer-token auth (`DEMO_MODE=false`), and the MCP server rejects any caller that doesn't present the shared gateway secret — reaching its port is not enough to call tools.
 * **🛡️ Fail-Closed Security**: By default, any ambiguous request or missing permission results in an immediate block, returning a clear, user-friendly explanation rather than a generic error code.
 * **💉 SQL Injection Prevention**: All database interactions are sanitized using abstractions and Parameterized Queries, completely preventing raw, LLM-generated SQL from hitting the database.
 
@@ -24,9 +27,9 @@ The system is built on a modular, Multi-Layer Architecture designed for clear se
 
 1.  **Interface Layer (LLM Handler)**: Manages communication with external LLMs (like OpenAI) to interpret user requests.
 2.  **MCP Server**: Exposes available database tools and capabilities to the LLM using the Model Context Protocol.
-3.  **Enforcement Layer (Policy Engine)**: The core security checkpoint that validates roles and permissions against the RBAC database.
+3.  **Enforcement Layer (Policy Engine)**: The core security checkpoint. It runs three stages in order — RBAC, Intent Alignment, then **Business-Logic Policies whose thresholds are read live from the `policies` table** — so admin-authored rules are enforced without a redeploy.
 4.  **Tools & Execution Layer**: Contains the business logic and standardized tools (e.g., `get_user_details`).
-5.  **Data Layer (Database Adapter & DB)**: Manages secure PostgreSQL connections and holds both organizational data and RBAC tables.
+5.  **Data Layer (Database Adapter & DB)**: Manages secure PostgreSQL connections and holds organizational data, RBAC tables, and the editable `policies` table.
 
 ## 🚀 Quickstart: Booting the Policy Engine
 
@@ -44,7 +47,7 @@ Before initiating the sequence, ensure your control station has the following in
 **Step 1: Secure the Source Code**
 Clone the repository to your local machine to begin.
 ```bash
-git clone [https://github.com/tayseer141/Mcp-Policy-Enforcement.git](https://github.com/tayseer141/Mcp-Policy-Enforcement.git)
+git clone https://github.com/tayseer141/Mcp-Policy-Enforcement.git
 cd Mcp-Policy-Enforcement
 ```
 
@@ -53,7 +56,17 @@ The system needs to know how to connect to your database and LLM provider. Copy 
 ```bash
 cp .env.example .env
 ```
-*(Open `.env` in your editor and configure your PostgreSQL credentials and LLM API keys).*
+*(Open `.env` in your editor and configure your PostgreSQL credentials, LLM API keys, and the authentication secrets — `SECRET_KEY`, `MCP_GATEWAY_KEY`).*
+
+**Demo credentials** (seeded automatically on first boot):
+
+| Username       | Password      | Role     |
+|----------------|---------------|----------|
+| `admin_user`   | `admin123`    | admin    |
+| `manager_user` | `manager123`  | Manager  |
+| `employee`     | `employee123` | Employee |
+
+The admin dashboard at `/admin` always requires a password login. The console at `/console` lets you switch between these users freely while `DEMO_MODE=true` (the default, for demonstrating RBAC differences live); set `DEMO_MODE=false` to require a Bearer token from `POST /api/v1/auth/login` on the execute API.
 
 **Step 3: Ignite the Engine (Docker Build)**
 Deploy the Multi-Layer Architecture. This single command spins up the MCP Server, the Policy Engine, and the testing database.

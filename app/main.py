@@ -16,11 +16,12 @@ from app.api.console import router as console_router
 
 # Data plane / control plane (JSON API)
 from app.api.admin_api import router as admin_api_router
+from app.api.auth_api import router as auth_api_router
 from app.api.policy_api import router as policy_api_router
 from app.api.execute import router as execute_router
 
 # Other surfaces
-from app.api.employees import router as employees_router
+from app.api.customers import router as customers_router
 from app.api.mcp import router as mcp_router
 
 # Side-effect imports so SQLAlchemy sees every model on Base.metadata
@@ -68,12 +69,13 @@ app.include_router(console_router)  # GET /console
 app.include_router(admin_router)    # /admin/login, /admin, /admin/users, ...
 
 # --- JSON API ---
+app.include_router(auth_api_router)     # POST /api/v1/auth/login
 app.include_router(execute_router)      # POST /api/v1/execute
 app.include_router(admin_api_router)    # /api/v1/admin/users, /roles, /permissions
 app.include_router(policy_api_router)   # /api/v1/admin/policies, /policy-types
 
 # --- Other surfaces ---
-app.include_router(employees_router)
+app.include_router(customers_router)
 app.include_router(mcp_router)
 
 

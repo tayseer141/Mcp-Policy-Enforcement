@@ -6,9 +6,16 @@ from typing import Any, Tuple
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
+from app.core.config import settings
+
 
 # Allow override via env so the same code runs locally and in docker-compose.
 MCP_SERVER_URL = os.getenv("MCP_SERVER_URL", "http://mcp-server:8000/mcp")
+
+# The MCP server rejects any request that doesn't present this shared
+# secret (see GatewayAuthMiddleware in app/mcp/server.py). Only the web
+# gateway holds it, so tool calls can't bypass this process.
+_GATEWAY_HEADERS = {"x-mcp-gateway-key": settings.MCP_GATEWAY_KEY}
 
 # Must match the sentinel in app/services/local_tool_executor.py
 POLICY_DENIED_KEY = "__policy_denied__"
@@ -70,7 +77,9 @@ async def _call_mcp_tool_async(
     TaskGroup"). Returning a tagged tuple and letting the synchronous wrapper
     decide how to raise keeps the exception type intact.
     """
-    async with streamablehttp_client(MCP_SERVER_URL) as (read, write, _):
+    async with streamablehttp_client(
+        MCP_SERVER_URL, headers=_GATEWAY_HEADERS
+    ) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
             result = await session.call_tool(tool_name, arguments)

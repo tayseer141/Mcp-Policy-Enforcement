@@ -15,6 +15,10 @@ Pipeline:
     4. On DENY/ERROR, the verbatim policy-engine reason is returned
        (never paraphrased — see ARCHITECTURE.md "LLM isolation").
 
+Authentication: see require_caller_identity — with DEMO_MODE=false the
+caller must present a Bearer token from POST /api/v1/auth/login whose
+identity matches the requested username.
+
 Two surfaces share this pipeline:
     * POST /api/v1/execute         — single JSON response (the contract).
     * POST /api/v1/execute/stream  — Server-Sent Events that narrate each
@@ -24,11 +28,14 @@ Two surfaces share this pipeline:
 import json
 import logging
 import time
+from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
+from app.core.security import verify_session_token
 from app.db.deps import get_db
 from app.schemas.execute import ExecuteRequest, ExecuteResponse
 from app.services.openai_service import (
@@ -51,6 +58,43 @@ _STAGE_PACING_S = 0.18
 # The four gates evaluated inside run_tool_for_user, in order. (Stage 1,
 # LLM tool-selection, happens before this list.)
 _SECURITY_GATES = ["rbac", "intent", "policy", "execution"]
+
+
+def require_caller_identity(
+    payload: ExecuteRequest, authorization: Optional[str]
+) -> None:
+    """
+    Authentication gate for the execute endpoints.
+
+    DEMO_MODE=true (default): the caller-asserted username is trusted so
+    the console can switch identities freely — a documented demo
+    convenience, not the production posture.
+
+    DEMO_MODE=false: the request must carry a signed bearer token from
+    POST /api/v1/auth/login, and the token's identity must match the
+    username in the body. Raises 401/403 otherwise (fail-closed).
+    """
+    if settings.DEMO_MODE:
+        return
+
+    token = None
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization[7:].strip()
+
+    token_username = verify_session_token(token)
+    if not token_username:
+        raise HTTPException(
+            status_code=401,
+            detail=(
+                "Authentication required: send 'Authorization: Bearer "
+                "<token>' from POST /api/v1/auth/login."
+            ),
+        )
+    if token_username != payload.username:
+        raise HTTPException(
+            status_code=403,
+            detail="Token identity does not match the requested username.",
+        )
 
 
 def _classify_denial_stage(reason: str) -> str:
@@ -81,13 +125,17 @@ def _stage(key: str, status: str) -> str:
 def execute_tool(
     payload: ExecuteRequest,
     db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
 ) -> ExecuteResponse:
     """
     Run one natural-language request through the secure pipeline.
 
-    Always returns 200 with a structured ExecuteResponse — clients
-    branch on `policy_decision` to know whether the call was allowed.
+    Returns 200 with a structured ExecuteResponse — clients branch on
+    `policy_decision` to know whether the call was allowed. When
+    DEMO_MODE=false, unauthenticated callers get 401/403 instead.
     """
+    require_caller_identity(payload, authorization)
+
     # --- Stage 1: LLM tool selection -----------------------------------
     selection = select_tool_from_prompt(payload.prompt)
     tool_name = selection.get("tool_name")
@@ -189,9 +237,13 @@ def execute_tool(
 def execute_tool_stream(
     payload: ExecuteRequest,
     db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
 ) -> StreamingResponse:
     """
     Streaming twin of POST /execute.
+
+    Authentication is checked BEFORE the stream opens, so an
+    unauthenticated caller gets a plain 401/403 (when DEMO_MODE=false).
 
     Runs the exact same secure pipeline, but emits a Server-Sent Event
     as the server reaches each stage so the console can light up the
@@ -199,6 +251,7 @@ def execute_tool_stream(
     final `result` event carries the same payload shape as the JSON
     ExecuteResponse, so clients render it identically.
     """
+    require_caller_identity(payload, authorization)
 
     def event_stream():
         base = {"username": payload.username, "prompt": payload.prompt}

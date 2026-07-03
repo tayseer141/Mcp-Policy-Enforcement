@@ -77,6 +77,14 @@ class PermissionPublic(BaseModel):
 class CreateUserRequest(BaseModel):
     username: str = Field(..., min_length=1)
     role_name: str = Field(..., min_length=1)
+    password: Optional[str] = Field(
+        default=None,
+        min_length=6,
+        description=(
+            "Initial password for the new user. If omitted, a documented "
+            "default is set and should be changed."
+        ),
+    )
 
 
 class AssignRoleRequest(BaseModel):

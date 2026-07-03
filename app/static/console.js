@@ -20,6 +20,78 @@
   const resultContainer = document.getElementById("result-container");
   const permPreview = document.getElementById("permission-preview");
 
+  // ============ Auth (secure mode) ============
+  // With DEMO_MODE=false the API requires a Bearer token from
+  // POST /api/v1/auth/login. Tokens are held in memory per username
+  // (never persisted), so switching users prompts for that user's
+  // password once.
+  const configEl = document.getElementById("config-data");
+  const config = configEl ? JSON.parse(configEl.textContent || "{}") : {};
+  const secureMode = config.demo_mode === false;
+  const tokens = {}; // username -> bearer token (in-memory only)
+
+  const passwordInput = document.getElementById("password");
+  const loginBtn = document.getElementById("login-btn");
+  const authStatus = document.getElementById("auth-status");
+
+  function setAuthStatus(kind, text) {
+    if (!authStatus) return;
+    authStatus.setAttribute("data-kind", kind);
+    authStatus.textContent = text;
+  }
+
+  function refreshAuthUi() {
+    if (!secureMode || !authStatus) return;
+    const user = usernameSelect.value;
+    if (tokens[user]) {
+      setAuthStatus("ok", "Authenticated as " + user + " ✓");
+      if (passwordInput) passwordInput.value = "";
+    } else {
+      setAuthStatus("warn", "Not authenticated — enter the password for " + user + " and sign in.");
+    }
+  }
+
+  async function doLogin() {
+    if (!passwordInput) return;
+    const user = usernameSelect.value;
+    const password = passwordInput.value;
+    if (!password) {
+      setAuthStatus("err", "Enter a password first.");
+      return;
+    }
+    if (loginBtn) { loginBtn.disabled = true; loginBtn.textContent = "Signing in…"; }
+    try {
+      const resp = await fetch("/api/v1/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: user, password: password }),
+      });
+      if (!resp.ok) {
+        tokens[user] = undefined;
+        setAuthStatus("err", "Invalid username or password.");
+        return;
+      }
+      const data = await resp.json();
+      tokens[user] = data.token;
+      refreshAuthUi();
+    } catch (err) {
+      setAuthStatus("err", "Login failed: " + (err.message || err));
+    } finally {
+      if (loginBtn) { loginBtn.disabled = false; loginBtn.textContent = "Sign in"; }
+    }
+  }
+
+  if (secureMode) {
+    if (loginBtn) loginBtn.addEventListener("click", doLogin);
+    if (passwordInput) {
+      // Enter in the password field logs in; it must not submit the form.
+      passwordInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); doLogin(); }
+      });
+    }
+    refreshAuthUi();
+  }
+
   // The five pipeline gates, in order. glyph shows while pending/running;
   // it swaps to ✓ / ✕ as each gate resolves.
   const GATES = [
@@ -65,7 +137,10 @@
     permPreview.innerHTML =
       `<span>Role <strong style="color:var(--text)">${escapeHtml(role)}</strong> grants:</span>${chips}`;
   }
-  usernameSelect.addEventListener("change", renderPermissions);
+  usernameSelect.addEventListener("change", () => {
+    renderPermissions();
+    refreshAuthUi();
+  });
   renderPermissions();
 
   // ============ Sample-prompt chips ============
@@ -243,12 +318,21 @@
   }
 
   async function streamRequest(payload) {
+    const headers = { "Content-Type": "application/json" };
+    if (secureMode && tokens[payload.username]) {
+      headers["Authorization"] = "Bearer " + tokens[payload.username];
+    }
     const resp = await fetch("/api/v1/execute/stream", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: headers,
       body: JSON.stringify(payload),
     });
     if (!resp.ok || !resp.body) {
+      // Expired/invalid token: drop it so the UI asks for the password again.
+      if (secureMode && resp.status === 401) {
+        tokens[payload.username] = undefined;
+        refreshAuthUi();
+      }
       let detail = `HTTP ${resp.status}`;
       try {
         const err = await resp.json();
@@ -290,6 +374,11 @@
       username: usernameSelect.value,
       prompt: promptInput.value,
     };
+    if (secureMode && !tokens[payload.username]) {
+      setAuthStatus("err", "Sign in as " + payload.username + " first — the API requires authentication.");
+      if (passwordInput) passwordInput.focus();
+      return;
+    }
     submitBtn.disabled = true;
     submitBtn.textContent = "Running…";
     buildScaffold();

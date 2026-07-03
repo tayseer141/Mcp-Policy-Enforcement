@@ -2,14 +2,8 @@ from typing import Any, Dict
 from sqlalchemy.orm import Session
 
 from app.policy.models import AuthorizationDecision
-from app.policy.rules import (
-    evaluate_delete_limit_policy,
-    evaluate_salary_raise_policy,
-    evaluate_starting_salary_policy,
-)
+from app.policy.bindings import iter_handlers_for_tool
 from app.policy.intent import check_intent_alignment
-from app.policy.store import resolve_active_policy
-from app.models.customer_model import Customer
 from app.models.rbac_models import User
 
 
@@ -88,105 +82,21 @@ def evaluate_policies(
     Stage 3: Business-logic Policy Evaluation.
     Contextual checks based on tool arguments.
 
-    Thresholds are no longer hardcoded — they are read from the policies
-    table via app.policy.store on every request, so admin changes (made
-    through the dashboard / NL authoring flow) take effect immediately.
-    A policy that an admin has disabled is simply not enforced here.
+    Dispatch is fully declarative: the policy catalog says which policy
+    types guard this tool, and app.policy.bindings supplies one handler
+    per type. Adding a new guarded tool therefore requires a catalog
+    entry and a handler -- this engine never changes.
+
+    Thresholds are not hardcoded -- each handler reads the active value
+    from the policies table via app.policy.store on every request, so
+    admin changes (dashboard / NL authoring flow) take effect
+    immediately. A policy an admin has disabled is simply not enforced.
+    The first denying handler wins (fail-closed ordering).
     """
-    if tool_name == "delete_customer":
-        active = resolve_active_policy(db, "max_delete_count", "delete_customer")
-        if not active.enforce:
-            return AuthorizationDecision(
-                allowed=True,
-                stage="policy",
-                reason="No active delete-limit policy; request allowed.",
-            )
-
-        allowed, reason, matched_policy = evaluate_delete_limit_policy(
-            tool_name=tool_name,
-            arguments=arguments,
-            max_delete_count=int(active.threshold),
-        )
-        return AuthorizationDecision(
-            allowed=allowed,
-            stage="policy",
-            reason=reason,
-            matched_policy=active.name or matched_policy,
-        )
-
-    if tool_name == "update_credit_limit":
-        customer_id = arguments.get("customer_id")
-        requested_credit_limit = arguments.get("new_credit_limit")
-
-        if customer_id is None or requested_credit_limit is None:
-            return AuthorizationDecision(
-                allowed=False,
-                stage="validation",
-                reason="Credit limit update denied because customer_id or new_credit_limit is missing.",
-                matched_policy="max_credit_limit_raise_percent",
-            )
-
-        customer = db.query(Customer).filter(Customer.id == customer_id).first()
-        if not customer:
-            return AuthorizationDecision(
-                allowed=False,
-                stage="validation",
-                reason="Credit limit update denied because the target customer was not found.",
-                matched_policy="max_credit_limit_raise_percent",
-            )
-
-        active = resolve_active_policy(
-            db, "max_credit_limit_raise_percent", "update_credit_limit"
-        )
-        if not active.enforce:
-            return AuthorizationDecision(
-                allowed=True,
-                stage="policy",
-                reason="No active credit-limit-raise policy; request allowed.",
-            )
-
-        allowed, reason, matched_policy = evaluate_salary_raise_policy(
-            current_salary=float(customer.credit_limit),
-            requested_salary=float(requested_credit_limit),
-            max_raise_percent=float(active.threshold),
-        )
-
-        return AuthorizationDecision(
-            allowed=allowed,
-            stage="policy",
-            reason=reason,
-            matched_policy=active.name or matched_policy,
-        )
-
-    if tool_name == "add_customer":
-        requested_credit_limit = arguments.get("credit_limit")
-
-        if requested_credit_limit is None:
-            return AuthorizationDecision(
-                allowed=False,
-                stage="validation",
-                reason="Add customer denied because the starting credit limit is missing.",
-                matched_policy="max_starting_credit_limit",
-            )
-
-        active = resolve_active_policy(db, "max_starting_credit_limit", "add_customer")
-        if not active.enforce:
-            return AuthorizationDecision(
-                allowed=True,
-                stage="policy",
-                reason="No active starting-credit-limit policy; request allowed.",
-            )
-
-        allowed, reason, matched_policy = evaluate_starting_salary_policy(
-            requested_salary=float(requested_credit_limit),
-            max_starting_credit_limit=float(active.threshold),
-        )
-        return AuthorizationDecision(
-            allowed=allowed,
-            stage="policy",
-            reason=reason,
-            matched_policy=active.name or matched_policy,
-        )
+    for _policy_type, handler in iter_handlers_for_tool(tool_name):
+        decision = handler(db, arguments)
+        if not decision.allowed:
+            return decision
 
     return AuthorizationDecision(
         allowed=True,

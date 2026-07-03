@@ -68,42 +68,43 @@ def evaluate_delete_limit_policy(
     return True, "Delete request is within policy limit.", "max_delete_count"
 
 
-def evaluate_salary_raise_policy(
-    current_salary: float,
-    requested_salary: float,
+def evaluate_credit_limit_raise_policy(
+    current_credit_limit: float,
+    requested_credit_limit: float,
     max_raise_percent: float,
 ) -> Tuple[bool, str, Optional[str]]:
     """
     Enforce a maximum credit-limit-raise percentage. `max_raise_percent` is
     supplied by the caller from the active policy — this function does not
-    invent a limit. (Parameter names are generic/legacy; the engine uses
-    this for the customer credit-limit raise check.)
+    invent a limit.
 
     Returns:
         (allowed, reason, matched_policy_name)
     """
-    if current_salary <= 0:
+    if current_credit_limit <= 0:
         return (
             False,
             "Credit limit update denied because current credit limit is invalid for policy evaluation.",
             "max_credit_limit_raise_percent",
         )
 
-    if requested_salary < 0:
+    if requested_credit_limit < 0:
         return (
             False,
             "Credit limit update denied because requested credit limit cannot be negative.",
             "max_credit_limit_raise_percent",
         )
 
-    if requested_salary <= current_salary:
+    if requested_credit_limit <= current_credit_limit:
         return (
             True,
             "Credit limit update is within policy limit.",
             "max_credit_limit_raise_percent",
         )
 
-    increase_percent = ((requested_salary - current_salary) / current_salary) * 100
+    increase_percent = (
+        (requested_credit_limit - current_credit_limit) / current_credit_limit
+    ) * 100
 
     if increase_percent > max_raise_percent:
         return (
@@ -119,26 +120,25 @@ def evaluate_salary_raise_policy(
     )
 
 
-def evaluate_starting_salary_policy(
-    requested_salary: float,
+def evaluate_starting_credit_limit_policy(
+    requested_credit_limit: float,
     max_starting_credit_limit: float,
 ) -> Tuple[bool, str, Optional[str]]:
     """
     Enforce a maximum starting credit limit for a newly created customer.
     `max_starting_credit_limit` is supplied by the caller from the active policy.
-    (Parameter names are generic/legacy.)
 
     Returns:
         (allowed, reason, matched_policy_name)
     """
-    if requested_salary < 0:
+    if requested_credit_limit < 0:
         return (
             False,
             "Add customer denied because the starting credit limit cannot be negative.",
             "max_starting_credit_limit",
         )
 
-    if requested_salary > max_starting_credit_limit:
+    if requested_credit_limit > max_starting_credit_limit:
         return (
             False,
             f"Starting credit limit exceeds the allowed maximum of {max_starting_credit_limit:.0f}.",

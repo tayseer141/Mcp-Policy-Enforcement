@@ -43,6 +43,18 @@
           <div class="permission-preview" id="permission-preview"></div>
         </div>
 
+        {% if not demo_mode %}
+        <div class="form-row" id="auth-row">
+          <label class="input-label" for="password">Authenticate</label>
+          <div class="auth-controls">
+            <input type="password" id="password" placeholder="password for the selected user"
+                   autocomplete="current-password">
+            <button type="button" class="btn" id="login-btn">Sign in</button>
+          </div>
+          <div class="auth-status" id="auth-status"></div>
+        </div>
+        {% endif %}
+
         <div class="form-row">
           <label class="input-label" for="prompt">Natural-language request</label>
           <span class="field-label">Try one</span>
@@ -66,6 +78,9 @@
      role. The JS reads this to render the permission-preview chips on
      dropdown change. tojson handles JSON encoding + HTML escaping. #}
   <script id="users-data" type="application/json">{{ users|tojson|safe }}</script>
+
+  {# Console config: tells the JS whether the API requires Bearer tokens. #}
+  <script id="config-data" type="application/json">{"demo_mode": {{ "true" if demo_mode else "false" }}}</script>
 
   <script src="{{ url_for('static', path='console.js') }}?v={{ asset_version }}"></script>
 </body>

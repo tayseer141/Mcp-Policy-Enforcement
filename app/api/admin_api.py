@@ -4,7 +4,7 @@ Admin JSON API.
 This module is the platform-grade admin surface. The HTML admin pages
 (in app/api/admin.py) and any future external client speak to the
 system through these endpoints. The HTML pages are now thin clients of
-this API — see app/templates/admin/users.html and roles.html.
+this API -- see app/templates/admin/users.html and roles.html.
 
 Auth model
 ----------
@@ -38,7 +38,9 @@ from app.api.admin import (
     _tool_backed_permission_names,
     require_admin,
 )
+from app.core.security import hash_password
 from app.db.deps import get_db
+from app.db.seed import DEFAULT_MIGRATION_PASSWORD
 from app.models.rbac_models import Permission, Role, User
 from app.schemas.admin import (
     ActionResponse,
@@ -129,7 +131,14 @@ def create_user(
     if not role:
         raise _api_error(404, "role_not_found", "That role was not found.")
 
-    db.add(User(username=username, role_id=role.id))
+    plain = payload.password or DEFAULT_MIGRATION_PASSWORD
+    db.add(
+        User(
+            username=username,
+            role_id=role.id,
+            password_hash=hash_password(plain),
+        )
+    )
     db.commit()
     return ActionResponse(code="user_created", message="User created.")
 
@@ -318,7 +327,7 @@ def remove_permission_from_role(
 # Permissions
 # =====================================================================
 #
-# There is intentionally no POST /permissions — permissions are a
+# There is intentionally no POST /permissions -- permissions are a
 # property of registered tools, not something an admin invents. The
 # tool-sync pass in app/mcp/server.py creates them on startup. The only
 # write action exposed here is delete.
